@@ -90,3 +90,4 @@ Código sob a licença MIT (arquivo `LICENSE`).
 - Fonte Overpass: SIL Open Font License 1.1 (`src/fonts/LICENSE-Overpass.txt`).
 - Google Weather API e Routes API: uso sujeito aos termos do Google Maps Platform, com a chave de cada pessoa.
 - Chuva observada: NASA GIBS, produto IMERG.
+
