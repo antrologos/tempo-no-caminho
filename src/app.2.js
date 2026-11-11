@@ -406,7 +406,7 @@ function renderRuler(){
   for(const c of CONDS){ rows.push({k: 'cond', flag: c[0], label: c[1], y}); y += rowH + rowGap; }
   const windy = pts.some(p => p.gust != null && p.gust >= 35);
   if(windy){ rows.push({k: 'wind', label: 'vento', y}); y += rowH + rowGap; }
-  if(Traf.has()){ rows.push({k: 'traf', label: 'trânsito', y}); y += rowH + rowGap; }
+  if(Traf.row()){ rows.push({k: 'traf', label: 'trânsito', y}); y += rowH + rowGap; }
   if(S.extra.road){ rows.push({k: 'road', label: 'pista', y}); y += rowH + rowGap; }
   const RL = S.extra.relief, relH = 26;
   if(RL){ rows.push({k: 'relief', label: 'relevo', y, h: relH}); y += relH + rowGap; }
@@ -578,7 +578,7 @@ function renderRuler(){
   $('#ruler-cap').innerHTML = (
     (nEns ? `<br><span>Chance calculada com ${nEns + nDet} previsões combinadas.</span>` : '') +
     (hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura no gráfico de chance: a chance pelo Google</span>` : '') +
-    (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : '') +
+    (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : Traf.row() ? '<br><span>Trânsito: o Google não informou a intensidade por trecho nesta consulta; o tempo de viagem já considera o trânsito.</span>' : '') +
     (windy ? `<br><span>Vento (rajadas):</span><span>${sw('--a1')}35 km/h ou mais</span><span>${sw('--a2')}50</span><span>${sw('--a3')}70</span>` : '') +
     (S.extra.road ? `<br><span>Pista:</span><span>${sw('--a2')}simples</span><span>${sw('--muted', 0.5)}dupla ou sentido único</span><span>${sw('--soft')}sem informação</span>` : '') +
     (RL ? `<br><span>Relevo: de ${nf(Math.round(RL.min / 10) * 10)} a ${nf(Math.round(RL.max / 10) * 10)} m.</span><span>${sw('--a1')}ondulado</span><span>${sw('--a2')}serra</span>` : '') +
@@ -792,7 +792,7 @@ function renderAll(){
   ['#verdict', '#ruler', '#depart', '#list'].forEach(s => { $(s).hidden = false; });
   $('#empty').hidden = true;
   $('#layout').classList.add('has-trip');
-  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render();
+  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render();
   MapCtl.paint();
   updatePill();
 }

@@ -14,6 +14,10 @@ Experimental. A previsão de chuva hora a hora, num ponto, com um dia de anteced
 2. Leia o resumo, o gráfico (chance de chuva em cima, volume embaixo) e a lista trecho a trecho.
 3. Opcional: em "Segunda fonte: Google", cole uma chave pessoal do Google Maps Platform com a Weather API e a Routes API liberadas. Com ela, o caminho e o tempo de viagem (com trânsito) passam a vir do Google, e a previsão do Google aparece ao lado da do app.
 
+## Acompanhar a viagem
+
+Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GPS do aparelho, com a tela ligada. O painel mostra onde você está no caminho, a chegada prevista, o que vem em 10, 30 e 60 minutos e o próximo aviso. Durante o acompanhamento o app se atualiza sozinho: o trânsito a partir da posição, a cada 5 minutos; a chuva pelo Google nos trechos à frente, a cada 15 minutos; os modelos e as simulações do Open-Meteo, a cada 3 horas. Se a pessoa ficar a mais de 800 m do caminho por mais de três minutos, a rota é refeita a partir de onde ela está (no máximo a cada 15 minutos e 8 vezes por viagem).
+
 ## De onde vêm os dados
 
 | O quê | Serviço | Observações |

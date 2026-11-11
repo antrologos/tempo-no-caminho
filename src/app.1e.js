@@ -44,18 +44,19 @@ const Goog = (() => {
     return true;
   }
   /* busca a previsão horária em 7 a 17 pontos do trajeto, do momento atual até 6 horas depois da chegada (no máximo 7 dias) */
-  async function load(){
+  /* opt.from: no acompanhamento, consulta só os trechos à frente do ponto em que a pessoa está; opt.force: ignora o que já está guardado */
+  async function load(opt = {}){
     const key = getKey();
     if(!key || S.demo || !S.samples || !S.trip) return null;
     const trip = S.trip, now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = S.routeId;
     if(trip.arr < now) return (S.goog = {routeId: rid, skip: 'passada'});
-    const need = Math.ceil((trip.arr - H0) / HOUR) + 6;
+    const need = Math.ceil((trip.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
     if(need > MAXH + 6) return (S.goog = {routeId: rid, skip: 'longe'});
     const hours = Math.min(MAXH, need);
-    if(S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
-    const N = S.samples.length, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
-    const nPts = Math.min(N, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
-    for(let q = 0; q < nPts; q++){ const i = Math.round(q * (N - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
+    if(!opt.force && S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
+    const N = S.samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
+    const nPts = Math.min(M, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
+    for(let q = 0; q < nPts; q++){ const i = i0 + Math.round(q * (M - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
     if(usage() + idx.length * pages > U.stop) throw new Error('o app atingiu o limite mensal que ele mesmo adota para o Google; volta no mês que vem');
     const res = new Array(idx.length);
     let next = 0;
@@ -110,8 +111,8 @@ const Traf = (() => {
   const month = () => new Date().toISOString().slice(0, 7);
   const usage = m => { try{ const u = JSON.parse(localStorage.getItem(UKEY[m])); return u && u.m === month() ? (u.n || 0) : 0; }catch(_){ return 0; } };
   const spend = m => { try{ localStorage.setItem(UKEY[m], JSON.stringify({m: month(), n: usage(m) + 1})); }catch(_){ /* sem armazenamento */ } };
-  /* 1 (padrão quando há chave): rota do Google com o tempo de trânsito; 2: também a intensidade por trecho; 0: rota do OpenStreetMap */
-  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 2 || t === '2') ? 2 : 1; };
+  /* 2 (padrão quando há chave): rota do Google com o tempo e a intensidade do trânsito por trecho; 1: só o tempo; 0: rota do OpenStreetMap */
+  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
   const sec = v => parseFloat(String(v));
   const CODE = {NORMAL: 0, SLOW: 1, TRAFFIC_JAM: 2};
   /* quanto cada situação alonga o tempo do trecho em relação ao trânsito livre. É uma suposição do app para repartir
@@ -240,7 +241,44 @@ const Traf = (() => {
     if(RL){ RL.pts.forEach(p => { p.t = tAt(p.d); }); RL.serras.forEach(q => { q.t0 = RL.pts[q.a].t; q.t1 = RL.pts[q.b].t; }); applyRelief(RL); }
     return 'same';
   }
+  /* instante (s) do perfil da rota a uma distância d do início */
+  function tAtDist(R, d){
+    const cd = R.cumDist;
+    let lo = 0, hi = cd.length - 1;
+    while(hi - lo > 1){ const m = (lo + hi) >> 1; if(cd[m] <= d) lo = m; else hi = m; }
+    const f = cd[hi] > cd[lo] ? clamp((d - cd[lo]) / (cd[hi] - cd[lo]), 0, 1) : 0;
+    return R.cumDur[lo] + (R.cumDur[hi] - R.cumDur[lo]) * f;
+  }
+  /* depois de mexer nos tempos da rota: refaz a hora de cada trecho e do relevo */
+  function resync(){
+    const R = S.route, N = S.samples.length;
+    S.samples.forEach(s => { s.t = tAtDist(R, s.dist); });
+    S.samples.forEach((s, i) => { const a = i ? (S.samples[i - 1].t + s.t) / 2 : s.t, b = i < N - 1 ? (s.t + S.samples[i + 1].t) / 2 : s.t; s.w = Math.max(1, b - a); });
+    const RL = S.extra && S.extra.relief;
+    if(RL){ RL.pts.forEach(p => { p.t = tAtDist(R, p.d); }); RL.serras.forEach(q => { q.t0 = RL.pts[q.a].t; q.t1 = RL.pts[q.b].t; }); applyRelief(RL); }
+  }
+  /* acompanhamento: o trânsito de agora, do ponto em que a pessoa está até a chegada. Refaz os horários dos trechos
+     à frente e a intensidade do trânsito neles. Devolve 'same', 'replan' (o caminho do Google daqui em diante é outro) ou null. */
+  async function live(pos, dHere){
+    const R = S.route;
+    if(!R || !R.google || !R.drive || S.demo || !mode()) return null;
+    const remain = R.dist - dHere;
+    if(remain < 800) return 'same';
+    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now());
+    if(!r2 || rid !== S.routeId) return null;
+    if(Math.abs(r2.dist - remain) > Math.max(1500, remain * 0.06)) return 'replan';
+    const ratio = r2.dist / remain, tHere = tAtDist(R, dHere), tmp = {cumDist: r2.cumDist, cumDur: r2.cumDur};
+    for(let j = 0; j < R.cumDist.length; j++) if(R.cumDist[j] > dHere) R.cumDur[j] = tHere + tAtDist(tmp, (R.cumDist[j] - dHere) * ratio);
+    R.dur = R.cumDur[R.cumDur.length - 1]; R.liveAt = Date.now();
+    if(r2.tcat){
+      const cats = sampleCats({tcat: r2.tcat, cumDist: r2.cumDist.map(v => dHere + v / ratio), dist: R.dist}, S.samples);
+      R.scat = S.samples.map((sm, i) => sm.dist >= dHere ? cats[i] : (R.scat ? R.scat[i] : null));
+    }
+    resync();
+    return 'same';
+  }
   const at = i => { const R = S.route; return R && R.google && R.scat ? R.scat[i] : null; };
   const has = () => { const R = S.route; return !!(R && R.google && R.scat && R.scat.some(c => c != null)); };
-  return {mode, route, retime, sampleCats, usage, at, has, STOP};
+  const row = () => { const R = S.route; return !!(R && R.google && R.drive); };      /* a faixa de trânsito aparece sempre que a rota de carro é do Google */
+  return {mode, route, retime, live, sampleCats, usage, at, has, row, STOP};
 })();

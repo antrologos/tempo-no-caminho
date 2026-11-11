@@ -192,6 +192,7 @@ function openMeteo(u, opt) {
 /* ---------- Overpass (OpenStreetMap): as vias ao longo do caminho da bancada, com os atributos de cada uma ----------
    Do ponto 150 ao 290 a estrada é de pista simples (mão dupla); do 300 ao 320, de terra; do 380 ao 395 não há via
    cadastrada; no resto, pista dupla (dois sentidos separados por 17 m). No ponto 60 passa uma transversal de mão dupla. */
+const k0s = og => !!og;      /* marca pedidos com origem informada (todos, na prática) */
 function overpassWays(opt) {
   const base = osrmRoute('https://x/route/v1/driving/a;b?steps=true', opt.kind).routes[0], pts = [];
   for (const st of base.legs[0].steps) st.geometry.coordinates.forEach((c, k) => { if (!pts.length || k) pts.push(c); });
@@ -322,7 +323,13 @@ async function open(opt = {}) {
           const base = osrmRoute('https://x/route/v1/driving/a;b?steps=true', opt.kind).routes[0], pts = [], steps = [];
           for (const st of base.legs[0].steps) { const cs = st.geometry.coordinates; cs.forEach((c, k) => { if (!pts.length || k) pts.push(c); }); steps.push({ distanceMeters: Math.round(st.distance), staticDuration: Math.round(st.duration) + 's', navigationInstruction: { instructions: st.ref ? 'Continue na ' + st.ref.split(';')[0] : st.name ? 'Vire à direita na ' + st.name : 'Continue em frente' } }); }
           const dep = body.departureTime ? new Date(body.departureTime) : new Date(), hl = ((dep.getTime() / HOUR - 3) % 24 + 24) % 24, k = body.routingPreference ? (hl >= 16.5 && hl <= 19.5 ? 1.36 : 1.13) : 1;
-          const r = { distanceMeters: Math.round(opt.routesDist || base.distance), duration: Math.round(base.duration * k) + 's', staticDuration: Math.round(base.duration) + 's', polyline: { encodedPolyline: encodePolyline(pts, 5) }, legs: [{ steps }] };
+          /* origem no meio do caminho (acompanhamento): devolve só o que falta, a partir do ponto mais próximo */
+          let frac = 1;
+          const og = body.origin && body.origin.location && body.origin.location.latLng;
+          if (og) { let k0 = 0, bd = Infinity; pts.forEach((c, q) => { const d = Math.hypot((c[0] - og.longitude) * 102000, (c[1] - og.latitude) * 110540); if (d < bd) { bd = d; k0 = q; } });
+            if (k0 > 3) { const hv = (a, b) => Math.hypot((a[0] - b[0]) * 102000, (a[1] - b[1]) * 110540); let tot = 0, rest = 0; for (let q = 1; q < pts.length; q++) { const d = hv(pts[q - 1], pts[q]); tot += d; if (q > k0) rest += d; } frac = rest / tot; pts.splice(0, k0); steps.length = 0; steps.push({ distanceMeters: Math.round(base.distance * frac), staticDuration: Math.round(base.duration * frac) + 's', navigationInstruction: { instructions: 'Continue na BR-116' } }); }
+            if (opt.liveDetour && k0 > 3) frac *= 1.3; }
+          const r = { distanceMeters: Math.round((opt.routesDist || base.distance) * frac), duration: Math.round(base.duration * frac * k * (opt.liveJam && k0s(og) ? 1.5 : 1)) + 's', staticDuration: Math.round(base.duration * frac) + 's', polyline: { encodedPolyline: encodePolyline(pts, 5) }, legs: [{ steps }] };
           if ((body.extraComputations || []).includes('TRAFFIC_ON_POLYLINE')) {
             const n = pts.length, a = Math.round(n * 0.06), b = Math.round(n * 0.9);
             r.travelAdvisory = { speedReadingIntervals: [{ endPolylinePointIndex: a, speed: 'TRAFFIC_JAM' }, { startPolylinePointIndex: a, endPolylinePointIndex: b, speed: 'NORMAL' }, { startPolylinePointIndex: b, endPolylinePointIndex: n - 1, speed: 'SLOW' }] };

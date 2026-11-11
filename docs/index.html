@@ -507,6 +507,21 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
 }
 @media (max-width:899px){ .layout[data-sheet="half"] .ro-facts > div:nth-child(n+4){display:none} }
 
+/* ---------- acompanhamento por GPS (versão 3.5) ---------- */
+.live{margin:0 0 14px;padding:12px 14px;border:2px solid var(--ink);border-radius:14px;background:var(--surface)}
+.live p{margin:0}
+.live .live-now{font-size:15.5px;line-height:1.35}
+.live .live-warn{margin-top:6px;font-size:13.5px;font-weight:700;color:var(--danger)}
+.live ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:7px}
+.live li{display:grid;grid-template-columns:78px minmax(0,1fr);column-gap:10px;font-size:14.5px;line-height:1.3}
+.live li > span{color:var(--muted);font-weight:700}
+.live li small{display:block;color:var(--muted);font-size:13px}
+.live .live-alert{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--yellow);color:#151A20;font-weight:700;font-size:14.5px;line-height:1.3}
+.live .live-calm{margin-top:10px;font-size:13.5px;color:var(--muted)}
+.mk-me{width:18px;height:18px;border-radius:50%;background:#1B6FE8;border:3px solid #fff;box-shadow:0 0 0 3px rgba(27,111,232,.35),0 1px 6px rgba(0,0,0,.45)}
+#live-btn{margin-left:8px}
+#live-btn[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+
 </style>
 </head>
 <body>
@@ -530,6 +545,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
     <symbol id="i-edit" viewBox="0 0 20 20"><path d="M3.5 16.5l.7-3.4 8.9-8.9a1.9 1.9 0 0 1 2.7 2.7l-8.9 8.9-3.4.7zM11.8 5.5l2.7 2.7"/></symbol>
     <symbol id="i-close" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></symbol>
     <symbol id="i-road" viewBox="0 0 20 20"><path d="M6.500 3.500L4 16.500M13.500 3.500l2.500 13M10 4v2.200M10 9v2.200M10 14v2.200"/></symbol>
+    <symbol id="i-loc" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.200"/><path d="M10 2.500v3M10 14.500v3M2.500 10h3M14.500 10h3"/></symbol>
     <symbol id="i-relief" viewBox="0 0 20 20"><path d="M2.5 15.5l5-8.2 3 4.700 2.2-3 4.800 6.500z"/></symbol>
     <symbol id="i-star" viewBox="0 0 20 20"><path d="M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.800 8.100l5-.7z"/></symbol>
   </defs>
@@ -631,12 +647,14 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
         <p class="empty-sub">A rota aparece colorida pela chuva prevista para a hora em que você passa por cada trecho, com a chance de ela acontecer.</p>
       </div>
       <div class="verdict" id="verdict" hidden>
+        <div class="live" id="live" hidden aria-live="polite"></div>
         <h2 id="v-head"></h2>
         <div class="chips" id="v-chips"></div>
         <div class="alerts" id="v-alerts"></div>
         <p id="v-sub" class="v-sub"></p>
         <p id="v-facts" class="facts"></p>
         <button type="button" class="savebtn" id="save-trip" hidden><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg><span>Salvar esta viagem</span></button>
+        <button type="button" class="savebtn" id="live-btn" hidden><svg class="ic" aria-hidden="true"><use href="#i-loc"/></svg><span>Acompanhar a viagem</span></button>
         <ul id="v-notes" class="notes"></ul>
       </div>
     </section>
@@ -701,8 +719,8 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
       </label>
       <label class="pref">Rota e trânsito
         <select id="pref-traf">
-          <option value="1">Rota do Google, com o tempo de trânsito</option>
           <option value="2">Rota do Google, com tempo e intensidade do trânsito por trecho</option>
+          <option value="1">Rota do Google, só com o tempo de trânsito</option>
           <option value="0">Rota do OpenStreetMap, sem trânsito</option>
         </select>
       </label>
@@ -748,6 +766,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
           <p><strong>Outras camadas.</strong> Os botões sobre o mapa trocam o que a linha mostra: chuva, vento, noite, neblina, trovoada, relevo ou tipo de pista. No gráfico, tudo aparece junto, uma faixa por assunto. O relevo tem três classes, medidas em trechos de cerca de 2 km: plano ou suave, ondulado (rampa média de 1% a 2,5%) e serra (rampa média de 2,5% ou mais, ou um trecho que sobe e desce com desnível equivalente). A altitude vem de um modelo de terreno com malha de 90 m, em até 200 pontos do trajeto. O tipo de pista vem dos dados de cada via no OpenStreetMap, lidos em dois pontos por trecho do caminho traçado: via de mão dupla numa pista só é pista simples; autoestrada ou via com sentidos separados é pista dupla. Onde o mapa não tem a via, o trecho fica sem informação. A qualidade depende de como a estrada foi cadastrada no mapa.</p>
           <p><strong>Trechos e consultas.</strong> Você escolhe de quantos em quantos minutos de viagem vai um trecho: 5, 7 ou 10. Os modelos detalhados são pedidos em no máximo 48 pontos, porque a malha deles é de 9 a 25 km, e as simulações, uma vez por célula de 25 km. Cada consulta nova gasta por volta de 600 do limite gratuito diário de 10.000 do Open-Meteo, que não pede cadastro nem cartão.</p>
           <p><strong>Rota e trânsito.</strong> Com a chave do Google, o caminho, a distância e o tempo de viagem são calculados pelo Google (Routes API, que precisa estar ativada no projeto e liberada na chave). De carro, o tempo já considera o trânsito previsto para o horário de saída; ao trocar o horário, o app pede o tempo de novo, sem buscar outra vez a previsão do clima. Na opção com intensidade, o Google informa onde o trânsito deve estar livre, lento ou parado, o que vira uma camada no mapa e uma faixa no gráfico; o app reparte o atraso entre os trechos lentos e parados por uma regra própria, e o tempo total é sempre o do Google. O gráfico de outros horários de saída usa o tempo de viagem do horário escolhido. O Google não informa se a pista é simples ou dupla: essa estimativa continua vindo do OpenStreetMap e é levada para o caminho do Google onde os dois traçados coincidem. Sem chave, ou se o Google falhar, o caminho é o do OpenStreetMap, sem trânsito, e o app avisa.</p>
+          <p><strong>Acompanhar a viagem.</strong> Com o app aberto num endereço seguro (https) ou instalado, o botão "Acompanhar a viagem" usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho; a hora de cada trecho à frente passa a contar a partir de agora, e o painel mostra o que vem em 10, 30 e 60 minutos (5, 15 e 30 a pé ou de bicicleta) e o próximo aviso. Durante o acompanhamento o app se atualiza sozinho: o trânsito, a partir da sua posição, a cada 5 minutos; a chuva pelo Google nos trechos à frente, a cada 15 minutos; os modelos e as simulações, a cada 3 horas, porque mudam poucas vezes por dia e o serviço gratuito é limitado. Se você ficar a mais de 800 m do caminho traçado por mais de três minutos, a rota é refeita a partir de onde você está, no máximo a cada 15 minutos e 8 vezes por viagem, porque cada rota refeita gasta uma consulta inteira de previsão. O painel mostra a hora da última atualização de cada dado.</p>
           <p><strong>Tempo de viagem.</strong> A rota vem do OpenStreetMap e não enxerga trânsito ao vivo, obras nem paradas. Use a folga para aproximar da sua realidade. Os horários seguem o fuso do seu aparelho.</p>
           <p><strong>Prazo.</strong> Quanto mais distante a data, menos confiáveis são a hora e o lugar exatos da chuva. Além de dois ou três dias, vale mais a tendência do que o detalhe. Confira de novo perto da saída.</p>
           <p><strong>O que não aparece aqui.</strong> Interdições, quedas de barreira, alagamentos e avisos oficiais. Antes de pegar a estrada, veja os alertas do INMET e da Defesa Civil e as condições da rodovia com a PRF ou a concessionária.</p>
@@ -1659,18 +1678,21 @@ function relief(pts){
   if(firstOk == null) throw new Error('sem altitude');
   for(let i = 0; i < n; i++) if(raw[i] == null) raw[i] = i ? raw[i - 1] : firstOk;
   const stepLen = n > 1 ? (pts[n - 1].d - pts[0].d) / (n - 1) : 0;
-  const fine = n > 2 && stepLen <= 800;                         /* só suaviza quando os pontos estão próximos */
+  const fine = n > 2 && stepLen <= 1500;                        /* suaviza quando os pontos estão próximos: o modelo de terreno tem ruído de uns 10 m */
   const h = fine ? raw.map((v, i) => (raw[Math.max(0, i - 1)] + v + raw[Math.min(n - 1, i + 1)]) / 3) : raw;
   pts.forEach((p, i) => { p.h = h[i]; });
   const m = n - 1, gr = [], cls = new Array(m).fill(0);
-  for(let i = 0; i < m; i++){ const dd = pts[i + 1].d - pts[i].d; gr.push(dd > 0 ? (h[i + 1] - h[i]) / dd * 100 : 0); }
+  /* a rampa de cada intervalo é medida numa base de pelo menos 2 km em volta dele */
+  const kb = Math.max(0, Math.ceil((2000 / Math.max(100, stepLen) - 1) / 2));
+  for(let i = 0; i < m; i++){ const a = Math.max(0, i - kb), b = Math.min(n - 1, i + 1 + kb), dd = pts[b].d - pts[a].d; gr.push(dd > 0 ? (h[b] - h[a]) / dd * 100 : 0); }
   for(let i = 0; i < m; i++){ const g = Math.abs(gr[i]); cls[i] = g >= 2.5 ? 2 : g >= 1 ? 1 : 0; }
   /* sobe e desce: numa janela de uns 8 km, a soma dos desníveis (em valor absoluto) passa de 2,5% da distância */
-  const win = clamp(Math.round(8000 / Math.max(200, stepLen)), 2, 12);
-  for(let i = 0; i + win <= m; i++){
-    let up = 0, len = 0;
-    for(let k = i; k < i + win; k++){ up += Math.abs(h[k + 1] - h[k]); len += pts[k + 1].d - pts[k].d; }
-    if(len > 0 && up / len * 100 >= 2.5) for(let k = i; k < i + win; k++) if(cls[k] < 2 && Math.abs(gr[k]) >= 1) cls[k] = 2;
+  const hop = Math.max(1, Math.round(2000 / Math.max(100, stepLen)));      /* passos de uns 2 km */
+  for(let i = 0; i + 4 * hop <= n - 1; i++){
+    let up = 0;
+    for(let q = 0; q < 4; q++) up += Math.abs(h[i + (q + 1) * hop] - h[i + q * hop]);
+    const len = pts[i + 4 * hop].d - pts[i].d;
+    if(len > 0 && up / len * 100 >= 2.5) for(let k = i; k < i + 4 * hop; k++) if(cls[k] < 2 && Math.abs(gr[k]) >= 1) cls[k] = 2;
   }
   /* trechos de serra para os avisos: intervalos de serra seguidos, tolerando um intervalo ondulado no meio */
   const runs = [];
@@ -2334,18 +2356,19 @@ const Goog = (() => {
     return true;
   }
   /* busca a previsão horária em 7 a 17 pontos do trajeto, do momento atual até 6 horas depois da chegada (no máximo 7 dias) */
-  async function load(){
+  /* opt.from: no acompanhamento, consulta só os trechos à frente do ponto em que a pessoa está; opt.force: ignora o que já está guardado */
+  async function load(opt = {}){
     const key = getKey();
     if(!key || S.demo || !S.samples || !S.trip) return null;
     const trip = S.trip, now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = S.routeId;
     if(trip.arr < now) return (S.goog = {routeId: rid, skip: 'passada'});
-    const need = Math.ceil((trip.arr - H0) / HOUR) + 6;
+    const need = Math.ceil((trip.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
     if(need > MAXH + 6) return (S.goog = {routeId: rid, skip: 'longe'});
     const hours = Math.min(MAXH, need);
-    if(S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
-    const N = S.samples.length, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
-    const nPts = Math.min(N, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
-    for(let q = 0; q < nPts; q++){ const i = Math.round(q * (N - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
+    if(!opt.force && S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
+    const N = S.samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
+    const nPts = Math.min(M, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
+    for(let q = 0; q < nPts; q++){ const i = i0 + Math.round(q * (M - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
     if(usage() + idx.length * pages > U.stop) throw new Error('o app atingiu o limite mensal que ele mesmo adota para o Google; volta no mês que vem');
     const res = new Array(idx.length);
     let next = 0;
@@ -2400,8 +2423,8 @@ const Traf = (() => {
   const month = () => new Date().toISOString().slice(0, 7);
   const usage = m => { try{ const u = JSON.parse(localStorage.getItem(UKEY[m])); return u && u.m === month() ? (u.n || 0) : 0; }catch(_){ return 0; } };
   const spend = m => { try{ localStorage.setItem(UKEY[m], JSON.stringify({m: month(), n: usage(m) + 1})); }catch(_){ /* sem armazenamento */ } };
-  /* 1 (padrão quando há chave): rota do Google com o tempo de trânsito; 2: também a intensidade por trecho; 0: rota do OpenStreetMap */
-  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 2 || t === '2') ? 2 : 1; };
+  /* 2 (padrão quando há chave): rota do Google com o tempo e a intensidade do trânsito por trecho; 1: só o tempo; 0: rota do OpenStreetMap */
+  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
   const sec = v => parseFloat(String(v));
   const CODE = {NORMAL: 0, SLOW: 1, TRAFFIC_JAM: 2};
   /* quanto cada situação alonga o tempo do trecho em relação ao trânsito livre. É uma suposição do app para repartir
@@ -2530,9 +2553,46 @@ const Traf = (() => {
     if(RL){ RL.pts.forEach(p => { p.t = tAt(p.d); }); RL.serras.forEach(q => { q.t0 = RL.pts[q.a].t; q.t1 = RL.pts[q.b].t; }); applyRelief(RL); }
     return 'same';
   }
+  /* instante (s) do perfil da rota a uma distância d do início */
+  function tAtDist(R, d){
+    const cd = R.cumDist;
+    let lo = 0, hi = cd.length - 1;
+    while(hi - lo > 1){ const m = (lo + hi) >> 1; if(cd[m] <= d) lo = m; else hi = m; }
+    const f = cd[hi] > cd[lo] ? clamp((d - cd[lo]) / (cd[hi] - cd[lo]), 0, 1) : 0;
+    return R.cumDur[lo] + (R.cumDur[hi] - R.cumDur[lo]) * f;
+  }
+  /* depois de mexer nos tempos da rota: refaz a hora de cada trecho e do relevo */
+  function resync(){
+    const R = S.route, N = S.samples.length;
+    S.samples.forEach(s => { s.t = tAtDist(R, s.dist); });
+    S.samples.forEach((s, i) => { const a = i ? (S.samples[i - 1].t + s.t) / 2 : s.t, b = i < N - 1 ? (s.t + S.samples[i + 1].t) / 2 : s.t; s.w = Math.max(1, b - a); });
+    const RL = S.extra && S.extra.relief;
+    if(RL){ RL.pts.forEach(p => { p.t = tAtDist(R, p.d); }); RL.serras.forEach(q => { q.t0 = RL.pts[q.a].t; q.t1 = RL.pts[q.b].t; }); applyRelief(RL); }
+  }
+  /* acompanhamento: o trânsito de agora, do ponto em que a pessoa está até a chegada. Refaz os horários dos trechos
+     à frente e a intensidade do trânsito neles. Devolve 'same', 'replan' (o caminho do Google daqui em diante é outro) ou null. */
+  async function live(pos, dHere){
+    const R = S.route;
+    if(!R || !R.google || !R.drive || S.demo || !mode()) return null;
+    const remain = R.dist - dHere;
+    if(remain < 800) return 'same';
+    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now());
+    if(!r2 || rid !== S.routeId) return null;
+    if(Math.abs(r2.dist - remain) > Math.max(1500, remain * 0.06)) return 'replan';
+    const ratio = r2.dist / remain, tHere = tAtDist(R, dHere), tmp = {cumDist: r2.cumDist, cumDur: r2.cumDur};
+    for(let j = 0; j < R.cumDist.length; j++) if(R.cumDist[j] > dHere) R.cumDur[j] = tHere + tAtDist(tmp, (R.cumDist[j] - dHere) * ratio);
+    R.dur = R.cumDur[R.cumDur.length - 1]; R.liveAt = Date.now();
+    if(r2.tcat){
+      const cats = sampleCats({tcat: r2.tcat, cumDist: r2.cumDist.map(v => dHere + v / ratio), dist: R.dist}, S.samples);
+      R.scat = S.samples.map((sm, i) => sm.dist >= dHere ? cats[i] : (R.scat ? R.scat[i] : null));
+    }
+    resync();
+    return 'same';
+  }
   const at = i => { const R = S.route; return R && R.google && R.scat ? R.scat[i] : null; };
   const has = () => { const R = S.route; return !!(R && R.google && R.scat && R.scat.some(c => c != null)); };
-  return {mode, route, retime, sampleCats, usage, at, has, STOP};
+  const row = () => { const R = S.route; return !!(R && R.google && R.drive); };      /* a faixa de trânsito aparece sempre que a rota de carro é do Google */
+  return {mode, route, retime, live, sampleCats, usage, at, has, row, STOP};
 })();
 
 /* ================= nomes e frases ================= */
@@ -2942,7 +3002,7 @@ function renderRuler(){
   for(const c of CONDS){ rows.push({k: 'cond', flag: c[0], label: c[1], y}); y += rowH + rowGap; }
   const windy = pts.some(p => p.gust != null && p.gust >= 35);
   if(windy){ rows.push({k: 'wind', label: 'vento', y}); y += rowH + rowGap; }
-  if(Traf.has()){ rows.push({k: 'traf', label: 'trânsito', y}); y += rowH + rowGap; }
+  if(Traf.row()){ rows.push({k: 'traf', label: 'trânsito', y}); y += rowH + rowGap; }
   if(S.extra.road){ rows.push({k: 'road', label: 'pista', y}); y += rowH + rowGap; }
   const RL = S.extra.relief, relH = 26;
   if(RL){ rows.push({k: 'relief', label: 'relevo', y, h: relH}); y += relH + rowGap; }
@@ -3114,7 +3174,7 @@ function renderRuler(){
   $('#ruler-cap').innerHTML = (
     (nEns ? `<br><span>Chance calculada com ${nEns + nDet} previsões combinadas.</span>` : '') +
     (hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura no gráfico de chance: a chance pelo Google</span>` : '') +
-    (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : '') +
+    (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : Traf.row() ? '<br><span>Trânsito: o Google não informou a intensidade por trecho nesta consulta; o tempo de viagem já considera o trânsito.</span>' : '') +
     (windy ? `<br><span>Vento (rajadas):</span><span>${sw('--a1')}35 km/h ou mais</span><span>${sw('--a2')}50</span><span>${sw('--a3')}70</span>` : '') +
     (S.extra.road ? `<br><span>Pista:</span><span>${sw('--a2')}simples</span><span>${sw('--muted', 0.5)}dupla ou sentido único</span><span>${sw('--soft')}sem informação</span>` : '') +
     (RL ? `<br><span>Relevo: de ${nf(Math.round(RL.min / 10) * 10)} a ${nf(Math.round(RL.max / 10) * 10)} m.</span><span>${sw('--a1')}ondulado</span><span>${sw('--a2')}serra</span>` : '') +
@@ -3328,7 +3388,7 @@ function renderAll(){
   ['#verdict', '#ruler', '#depart', '#list'].forEach(s => { $(s).hidden = false; });
   $('#empty').hidden = true;
   $('#layout').classList.add('has-trip');
-  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render();
+  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render();
   MapCtl.paint();
   updatePill();
 }
@@ -3587,6 +3647,14 @@ const MapCtl = (() => {
       } else initSketch(isMobile() ? '' : 'Esquema da rota de exemplo');
       if(S.samples) this.setTrip();
     },
+    /* a posição do aparelho no mapa; o mapa acompanha, a menos que a pessoa tenha mexido nele há pouco */
+    me(lon, lat){
+      if(kind !== 'gl' || !glReady) return;
+      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); }); }
+      mk.me.setLngLat([lon, lat]).addTo(gl);
+      if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
+    },
+    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
     async goLive(){
       if(kind === 'gl') return;
       const old = el; kind = null;
@@ -4033,6 +4101,7 @@ function settle(ok){
 
 async function plan(opts = {}){
   if(S.busy) return;
+  if(Live.on() && !opts.live) Live.stop();
   hideError();
   if(S.demo){ applyWhen(); showResult(); return; }
   let ok = false;
@@ -4053,12 +4122,13 @@ async function plan(opts = {}){
     setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
     const dep = readDepart();
     const wx = await loadWeather(samples, dep, route.dur);
-    Object.assign(S, {from, to, route, samples, wx, wxDay: startOfDay(dep), places: [], urban: route.dist < 40000, routeMode: profile});
+    Object.assign(S, {from, to, route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000, routeMode: profile});
     S.extra = {relief: null, road: false};
     const id = ++S.routeId;
     recompute({focusWorst: true});
     MapCtl.setTrip();
     if(!opts.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
+    if(opts.live) Live.rebase();
     writeHash();
     namePlaces(id);
     loadExtras(id);
@@ -4110,7 +4180,7 @@ async function applyWhen(){
     if(day !== S.wxDay){ S.wx = Demo.weather(S.samples, day); S.wxDay = day; }
     recompute(); return;
   }
-  if(await retimeGoogle(dep)) return;
+  if(!Live.on() && await retimeGoogle(dep)) return;      /* no acompanhamento, o trânsito é refeito a partir da posição, não da partida */
   if(wxOk()){ recompute(); Conf.record(S.trip); googRefresh(); return; }
   if(S.busy) return;
   const id = S.routeId;
@@ -4119,13 +4189,24 @@ async function applyWhen(){
   try{
     const wx = await loadWeather(S.samples, dep, S.route.dur);
     if(id !== S.routeId) return;
-    S.wx = wx; S.wxDay = day;
+    S.wx = wx; S.wxDay = day; S.wxAt = Date.now();
     recompute();
     Conf.record(S.trip);
     googRefresh();
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
+}
+
+/* acompanhamento: busca de novo os modelos e as simulações para os mesmos trechos, sem mexer na tela */
+async function refreshWeather(){
+  if(S.busy || S.demo || !S.route) return false;
+  const id = S.routeId, dep = readDepart();
+  const wx = await loadWeather(S.samples, dep, S.route.dur);
+  if(id !== S.routeId) return false;
+  S.wx = wx; S.wxDay = startOfDay(dep); S.wxAt = Date.now();
+  recompute();
+  return true;
 }
 
 function enterDemo(){
@@ -4262,6 +4343,7 @@ function initUI(){
     renderSources(); renderModels();
   });
   $('#models').addEventListener('toggle', renderModels);
+  $('#live-btn').addEventListener('click', () => Live.toggle());
   /* chave pessoal do Google */
   const gkRefresh = () => {
     const has = !!Goog.getKey();
@@ -4281,7 +4363,7 @@ function initUI(){
   $('#pref-guse').value = Prefs.get().guse;
   $('#pref-step').addEventListener('change', e => { Prefs.set({step: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); });
   $('#pref-guse').addEventListener('change', e => { Prefs.set({guse: e.target.value}); S.goog = null; gkRefresh(); googRefresh(); });
-  { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 2 || t === '2') ? 2 : 1); }
+  { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2); }
   $('#pref-traf').addEventListener('change', e => { Prefs.set({traf: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
   /* estado do trânsito, logo abaixo da escolha */
   window.addEventListener('tnc-goog', () => {
@@ -4441,8 +4523,192 @@ async function boot(){
   }
   else if(!S.route && !S.busy) enterDemo();
 }
+/* ================= acompanhamento: onde estou e o que vem pela frente =================
+   Usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho traçado;
+   a hora de cada trecho à frente passa a contar a partir de agora, e não do horário planejado.
+   Não faz consultas novas: usa a previsão e o trânsito da última consulta. */
+const Live = (() => {
+  let watch = null, lock = null, last = null, vi = 0, lastShift = 0, msg = '';
+  /* de quanto em quanto tempo cada coisa é atualizada sozinha durante o acompanhamento */
+  const EVERY = {tick: 20 * 1000, traf: 5 * MIN, goog: 15 * MIN, wx: 3 * HOUR, replan: 15 * MIN, off: 3 * MIN, far: 800};
+  let timer = null, working = false, due = {traf: 0, goog: 0, replan: 0}, offSince = 0, replans = 0, note = '';
+  const on = () => watch != null;
+  function snap(lon, lat){
+    const R = S.route, c = R.coords, n = c.length, kx = Math.cos(lat * Math.PI / 180) * 111320, ky = 110540;
+    let best = null;
+    const scan = (a, b) => {
+      for(let j = Math.max(0, a); j < Math.min(n - 1, b); j++){
+        const ax = (c[j][0] - lon) * kx, ay = (c[j][1] - lat) * ky, dx = (c[j + 1][0] - c[j][0]) * kx, dy = (c[j + 1][1] - c[j][1]) * ky;
+        const L2 = dx * dx + dy * dy, t = L2 ? clamp(-(ax * dx + ay * dy) / L2, 0, 1) : 0, d = Math.hypot(ax + dx * t, ay + dy * t);
+        if(!best || d < best.off) best = {off: d, j, t};
+      }
+    };
+    scan(vi - 60, vi + 500);                              /* primeiro perto de onde estava */
+    if(!best || best.off > 400){ best = null; scan(0, n - 1); }   /* ficou longe: olha o caminho inteiro */
+    vi = best.j;
+    return {off: best.off, d: R.cumDist[best.j] + (R.cumDist[best.j + 1] - R.cumDist[best.j]) * best.t, t: R.cumDur[best.j] + (R.cumDur[best.j + 1] - R.cumDur[best.j]) * best.t};
+  }
+  const here = () => { let i = 0; S.samples.forEach((s, q) => { if(Math.abs(s.dist - last.sp.d) < Math.abs(S.samples[i].dist - last.sp.d)) i = q; }); return i; };
+  const cond = p => p.klass >= 1 ? `${cap(rainPhrase(p.catIf, p.amt))} ${KLASS[p.klass]}, ${pct(p.pop)} de chance` : (p.fog ? 'Neblina possível' : 'Sem chuva');
+  function flags(j){
+    const p = S.trip.pts[j], s = S.samples[j], out = [];
+    if(s.pista === 'simples') out.push('pista simples');
+    if(s.unpaved) out.push('sem pavimento');
+    if(s.rcls === 2) out.push('serra');
+    if(p.fog && p.klass >= 1) out.push('neblina possível');
+    if(p.thunder) out.push('trovoadas possíveis');
+    const tc = Traf.at(j);
+    if(tc === 2) out.push('trânsito congestionado'); else if(tc === 1) out.push('trânsito lento');
+    if(p.night) out.push('noite');
+    return out;
+  }
+  /* o que merece aviso num trecho, ou '' */
+  function hazard(j){
+    const p = S.trip.pts[j], s = S.samples[j], single = s.pista === 'simples';
+    if(p.klass >= 2 && p.catIf >= 2) return `${rainPhrase(p.catIf, p.amt)} ${KLASS[p.klass]}${single ? ', em pista simples' : ''}`;
+    if(p.fog) return `neblina possível${single ? ', em pista simples' : ''}`;
+    if(Traf.at(j) === 2) return 'trânsito congestionado';
+    if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
+    return '';
+  }
+  function render(){
+    const box = $('#live'), btn = $('#live-btn');
+    btn.hidden = !S.trip || !!S.demo;
+    btn.setAttribute('aria-pressed', String(on()));
+    btn.querySelector('span').textContent = on() ? 'Parar o acompanhamento' : 'Acompanhar a viagem';
+    if(!on() && !msg){ box.hidden = true; return; }
+    box.hidden = false;
+    if(!on()){ box.innerHTML = `<p class="live-warn">${esc(msg)}</p>`; return; }
+    if(!last || !S.trip){ box.innerHTML = `<p class="live-now">${esc(msg || 'Procurando a sua posição…')}</p>`; return; }
+    const trip = S.trip, pts = trip.pts, N = pts.length, now = Date.now(), i = here();
+    let h = `<p class="live-now"><strong>Agora:</strong> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}${trip.arr > now ? `, em ${durText((trip.arr - now) / 1000)}` : ''}.</p>`;
+    if(last.sp.off > 300) h += `<p class="live-warn">Você está a ${kmText(last.sp.off)} do caminho traçado. As horas abaixo valem para o ponto mais próximo dele.</p>`;
+    const rows = [];
+    for(const m of (S.routeMode === 'car' ? [10, 30, 60] : [5, 15, 30])){
+      const tt = now + m * MIN;
+      if(tt > trip.arr) break;
+      let j = i;
+      for(let q = i; q < N; q++) if(Math.abs(pts[q].t - tt) < Math.abs(pts[j].t - tt)) j = q;
+      const fl = flags(j);
+      rows.push(`<li><span>em ${m} min</span><div><b>${esc(cond(pts[j]))}</b><small>${esc(cap(perto(pts, j)))}${fl.length ? '; ' + esc(fl.join('; ')) : ''}</small></div></li>`);
+    }
+    if(rows.length) h += `<ul>${rows.join('')}</ul>`;
+    let alert = '';
+    for(let q = i + 1; q < N && !alert; q++){
+      const hz = hazard(q);
+      if(hz && pts[q].t > now) alert = `Próximo aviso: em ${minText((pts[q].t - now) / MIN)}, ${hz}, ${perto(pts, q)}.`;
+    }
+    h += alert ? `<p class="live-alert">${esc(alert)}</p>` : '<p class="live-calm">Nenhum aviso no caminho à frente.</p>';
+    /* quando cada dado foi atualizado pela última vez */
+    const ups = [];
+    if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
+    if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
+    if(S.wxAt) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
+    if(note) h += `<p class="live-calm">${esc(note)}</p>`;
+    box.innerHTML = h;
+  }
+  function fix(pos){
+    if(!S.route || !S.trip || !on()) return;
+    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now();
+    last = {lon, lat, acc: pos.coords.accuracy, sp, at: now}; msg = '';
+    MapCtl.me(lon, lat);
+    /* o trecho em que estou passa a ser "agora": desloca o horário de saída, no máximo uma vez por minuto */
+    const depEff = now - sp.t * 1000 * (1 + S.slack);
+    const gap = Math.abs(depEff - S.departMs);           /* diferença entre o relógio da viagem e a posição real */
+    if(sp.off <= 2000 && gap > 90 * 1000 && (now - lastShift > 60 * 1000 || gap > 5 * MIN) && !S.busy){
+      lastShift = now;
+      const d = new Date(depEff);
+      els.date.value = isoLocal(depEff); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      if(wxOk()) recompute(); else applyWhen();
+    }
+    const i = here();
+    if(i !== S.scrub) setScrub(i, {pan: false});
+    render();
+  }
+  /* trecho em que estou passa a ser "agora": acerta o horário de saída e recalcula, sem consulta nova */
+  function reanchor(){
+    if(!last || !S.route) return;
+    const depEff = Date.now() - last.sp.t * 1000 * (1 + S.slack), d = new Date(depEff);
+    lastShift = Date.now();
+    els.date.value = isoLocal(depEff); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if(wxOk()) recompute(); else applyWhen();
+  }
+  /* saí do caminho traçado: nova consulta a partir de onde estou */
+  async function replanFromHere(){
+    if(!last || S.busy) return;
+    replans++;
+    S.pick.from = {label: 'Minha localização', detail: '', lat: last.lat, lon: last.lon};
+    els.from.value = 'Minha localização';
+    const d = new Date();
+    els.date.value = isoLocal(d.getTime()); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    note = `Rota refeita a partir da sua posição às ${hhmm(Date.now())}.`;
+    await plan({keep: true, live: true});
+  }
+  /* a cada 20 s, vê o que está na hora de atualizar. Uma coisa de cada vez. */
+  async function tick(){
+    if(!on() || working || S.busy || !last || !S.trip) return;
+    const now = Date.now();
+    working = true;
+    try{
+      if(last.sp.off > EVERY.far){ if(!offSince) offSince = now; } else offSince = 0;
+      const canReplan = now - due.replan > EVERY.replan && replans < 8;
+      if(offSince && now - offSince > EVERY.off){
+        if(canReplan){ due.replan = now; offSince = 0; await replanFromHere(); return; }
+        note = replans >= 8 ? 'Você segue fora do caminho traçado. O app já refez a rota 8 vezes nesta viagem e parou de refazer sozinho; refaça a consulta se quiser.' : note;
+      }
+      if(S.route.google && S.route.drive && last.sp.off <= EVERY.far && now - due.traf > EVERY.traf){
+        due.traf = now;
+        try{
+          const r = await Traf.live({lat: last.lat, lon: last.lon}, last.sp.d);
+          if(r === 'replan' && canReplan){ due.replan = now; await replanFromHere(); return; }
+          if(r === 'same'){ last.sp = snap(last.lon, last.lat); reanchor(); if(/trânsito/.test(note)) note = ''; }
+        }catch(e){ note = `Não deu para atualizar o trânsito agora (${(e && e.message) || 'sem resposta'}).`; }
+      }
+      if(Goog.getKey() && now - due.goog > EVERY.goog){
+        due.goog = now;
+        try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ renderVerdict(); renderReadout(); renderRuler(); renderList(); } }
+        catch(e){ note = `Não deu para atualizar a chuva pelo Google agora (${(e && e.message) || 'sem resposta'}).`; }
+      }
+      if(now - (S.wxAt || 0) > EVERY.wx){
+        try{ await refreshWeather(); }
+        catch(e){ S.wxAt = now - EVERY.wx + 20 * MIN; note = 'Não deu para atualizar os modelos agora; o app tenta de novo em 20 minutos.'; }
+      }
+    } finally { working = false; render(); }
+  }
+  function fail(e){
+    msg = e && e.code === 1 ? 'O app não tem permissão para ver a localização. Libere a localização para este site nas configurações do navegador.'
+      : 'Sem sinal de localização agora. O acompanhamento continua tentando.';
+    if(e && e.code === 1) stop(true); else render();
+  }
+  async function keepAwake(){ try{ if('wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); }catch(_){ /* sem trava de tela: segue assim mesmo */ } }
+  function start(){
+    if(on() || !S.trip) return;
+    if(!('geolocation' in navigator) || window.isSecureContext === false){ msg = 'A localização só funciona com o app aberto num endereço seguro (https) ou instalado.'; render(); return; }
+    msg = ''; note = ''; last = null; vi = 0; lastShift = 0; offSince = 0; replans = 0;
+    /* o trânsito é refeito logo na primeira posição; a chuva do Google, quando a guardada tiver mais de 15 minutos */
+    due = {traf: 0, goog: (S.goog && S.goog.when) || 0, replan: 0};
+    watch = navigator.geolocation.watchPosition(fix, fail, {enableHighAccuracy: true, maximumAge: 5000, timeout: 30000});
+    timer = setInterval(tick, EVERY.tick);
+    keepAwake(); render();
+  }
+  function stop(keepMsg){
+    if(watch != null){ navigator.geolocation.clearWatch(watch); watch = null; }
+    if(timer){ clearInterval(timer); timer = null; }
+    if(lock){ try{ lock.release(); }catch(_){ /* já solta */ } lock = null; }
+    if(!keepMsg) msg = '';
+    last = null; MapCtl.meOff(); render();
+  }
+  document.addEventListener('visibilitychange', () => { if(on() && document.visibilityState === 'visible') keepAwake(); });
+  /* depois de uma rota refeita: a busca do ponto mais próximo recomeça do início do novo caminho */
+  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); };
+  /* só para os testes: encurta os intervalos */
+  const _every = o => { Object.assign(EVERY, o); if(timer){ clearInterval(timer); timer = setInterval(tick, EVERY.tick); } };
+  return {on, start, stop, render, rebase, _every, toggle: () => (on() ? stop() : start())};
+})();
+
 /* acesso para testes e diagnóstico */
-window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Budget, detMembers};
+window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers};
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 

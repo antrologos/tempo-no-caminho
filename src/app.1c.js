@@ -30,18 +30,21 @@ function relief(pts){
   if(firstOk == null) throw new Error('sem altitude');
   for(let i = 0; i < n; i++) if(raw[i] == null) raw[i] = i ? raw[i - 1] : firstOk;
   const stepLen = n > 1 ? (pts[n - 1].d - pts[0].d) / (n - 1) : 0;
-  const fine = n > 2 && stepLen <= 800;                         /* só suaviza quando os pontos estão próximos */
+  const fine = n > 2 && stepLen <= 1500;                        /* suaviza quando os pontos estão próximos: o modelo de terreno tem ruído de uns 10 m */
   const h = fine ? raw.map((v, i) => (raw[Math.max(0, i - 1)] + v + raw[Math.min(n - 1, i + 1)]) / 3) : raw;
   pts.forEach((p, i) => { p.h = h[i]; });
   const m = n - 1, gr = [], cls = new Array(m).fill(0);
-  for(let i = 0; i < m; i++){ const dd = pts[i + 1].d - pts[i].d; gr.push(dd > 0 ? (h[i + 1] - h[i]) / dd * 100 : 0); }
+  /* a rampa de cada intervalo é medida numa base de pelo menos 2 km em volta dele */
+  const kb = Math.max(0, Math.ceil((2000 / Math.max(100, stepLen) - 1) / 2));
+  for(let i = 0; i < m; i++){ const a = Math.max(0, i - kb), b = Math.min(n - 1, i + 1 + kb), dd = pts[b].d - pts[a].d; gr.push(dd > 0 ? (h[b] - h[a]) / dd * 100 : 0); }
   for(let i = 0; i < m; i++){ const g = Math.abs(gr[i]); cls[i] = g >= 2.5 ? 2 : g >= 1 ? 1 : 0; }
   /* sobe e desce: numa janela de uns 8 km, a soma dos desníveis (em valor absoluto) passa de 2,5% da distância */
-  const win = clamp(Math.round(8000 / Math.max(200, stepLen)), 2, 12);
-  for(let i = 0; i + win <= m; i++){
-    let up = 0, len = 0;
-    for(let k = i; k < i + win; k++){ up += Math.abs(h[k + 1] - h[k]); len += pts[k + 1].d - pts[k].d; }
-    if(len > 0 && up / len * 100 >= 2.5) for(let k = i; k < i + win; k++) if(cls[k] < 2 && Math.abs(gr[k]) >= 1) cls[k] = 2;
+  const hop = Math.max(1, Math.round(2000 / Math.max(100, stepLen)));      /* passos de uns 2 km */
+  for(let i = 0; i + 4 * hop <= n - 1; i++){
+    let up = 0;
+    for(let q = 0; q < 4; q++) up += Math.abs(h[i + (q + 1) * hop] - h[i + q * hop]);
+    const len = pts[i + 4 * hop].d - pts[i].d;
+    if(len > 0 && up / len * 100 >= 2.5) for(let k = i; k < i + 4 * hop; k++) if(cls[k] < 2 && Math.abs(gr[k]) >= 1) cls[k] = 2;
   }
   /* trechos de serra para os avisos: intervalos de serra seguidos, tolerando um intervalo ondulado no meio */
   const runs = [];

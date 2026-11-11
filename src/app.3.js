@@ -253,6 +253,14 @@ const MapCtl = (() => {
       } else initSketch(isMobile() ? '' : 'Esquema da rota de exemplo');
       if(S.samples) this.setTrip();
     },
+    /* a posição do aparelho no mapa; o mapa acompanha, a menos que a pessoa tenha mexido nele há pouco */
+    me(lon, lat){
+      if(kind !== 'gl' || !glReady) return;
+      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); }); }
+      mk.me.setLngLat([lon, lat]).addTo(gl);
+      if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
+    },
+    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
     async goLive(){
       if(kind === 'gl') return;
       const old = el; kind = null;
@@ -699,6 +707,7 @@ function settle(ok){
 
 async function plan(opts = {}){
   if(S.busy) return;
+  if(Live.on() && !opts.live) Live.stop();
   hideError();
   if(S.demo){ applyWhen(); showResult(); return; }
   let ok = false;
@@ -719,12 +728,13 @@ async function plan(opts = {}){
     setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
     const dep = readDepart();
     const wx = await loadWeather(samples, dep, route.dur);
-    Object.assign(S, {from, to, route, samples, wx, wxDay: startOfDay(dep), places: [], urban: route.dist < 40000, routeMode: profile});
+    Object.assign(S, {from, to, route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000, routeMode: profile});
     S.extra = {relief: null, road: false};
     const id = ++S.routeId;
     recompute({focusWorst: true});
     MapCtl.setTrip();
     if(!opts.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
+    if(opts.live) Live.rebase();
     writeHash();
     namePlaces(id);
     loadExtras(id);
@@ -776,7 +786,7 @@ async function applyWhen(){
     if(day !== S.wxDay){ S.wx = Demo.weather(S.samples, day); S.wxDay = day; }
     recompute(); return;
   }
-  if(await retimeGoogle(dep)) return;
+  if(!Live.on() && await retimeGoogle(dep)) return;      /* no acompanhamento, o trânsito é refeito a partir da posição, não da partida */
   if(wxOk()){ recompute(); Conf.record(S.trip); googRefresh(); return; }
   if(S.busy) return;
   const id = S.routeId;
@@ -785,13 +795,24 @@ async function applyWhen(){
   try{
     const wx = await loadWeather(S.samples, dep, S.route.dur);
     if(id !== S.routeId) return;
-    S.wx = wx; S.wxDay = day;
+    S.wx = wx; S.wxDay = day; S.wxAt = Date.now();
     recompute();
     Conf.record(S.trip);
     googRefresh();
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
+}
+
+/* acompanhamento: busca de novo os modelos e as simulações para os mesmos trechos, sem mexer na tela */
+async function refreshWeather(){
+  if(S.busy || S.demo || !S.route) return false;
+  const id = S.routeId, dep = readDepart();
+  const wx = await loadWeather(S.samples, dep, S.route.dur);
+  if(id !== S.routeId) return false;
+  S.wx = wx; S.wxDay = startOfDay(dep); S.wxAt = Date.now();
+  recompute();
+  return true;
 }
 
 function enterDemo(){
@@ -928,6 +949,7 @@ function initUI(){
     renderSources(); renderModels();
   });
   $('#models').addEventListener('toggle', renderModels);
+  $('#live-btn').addEventListener('click', () => Live.toggle());
   /* chave pessoal do Google */
   const gkRefresh = () => {
     const has = !!Goog.getKey();
@@ -947,7 +969,7 @@ function initUI(){
   $('#pref-guse').value = Prefs.get().guse;
   $('#pref-step').addEventListener('change', e => { Prefs.set({step: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); });
   $('#pref-guse').addEventListener('change', e => { Prefs.set({guse: e.target.value}); S.goog = null; gkRefresh(); googRefresh(); });
-  { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 2 || t === '2') ? 2 : 1); }
+  { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2); }
   $('#pref-traf').addEventListener('change', e => { Prefs.set({traf: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
   /* estado do trânsito, logo abaixo da escolha */
   window.addEventListener('tnc-goog', () => {
@@ -1107,8 +1129,192 @@ async function boot(){
   }
   else if(!S.route && !S.busy) enterDemo();
 }
+/* ================= acompanhamento: onde estou e o que vem pela frente =================
+   Usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho traçado;
+   a hora de cada trecho à frente passa a contar a partir de agora, e não do horário planejado.
+   Não faz consultas novas: usa a previsão e o trânsito da última consulta. */
+const Live = (() => {
+  let watch = null, lock = null, last = null, vi = 0, lastShift = 0, msg = '';
+  /* de quanto em quanto tempo cada coisa é atualizada sozinha durante o acompanhamento */
+  const EVERY = {tick: 20 * 1000, traf: 5 * MIN, goog: 15 * MIN, wx: 3 * HOUR, replan: 15 * MIN, off: 3 * MIN, far: 800};
+  let timer = null, working = false, due = {traf: 0, goog: 0, replan: 0}, offSince = 0, replans = 0, note = '';
+  const on = () => watch != null;
+  function snap(lon, lat){
+    const R = S.route, c = R.coords, n = c.length, kx = Math.cos(lat * Math.PI / 180) * 111320, ky = 110540;
+    let best = null;
+    const scan = (a, b) => {
+      for(let j = Math.max(0, a); j < Math.min(n - 1, b); j++){
+        const ax = (c[j][0] - lon) * kx, ay = (c[j][1] - lat) * ky, dx = (c[j + 1][0] - c[j][0]) * kx, dy = (c[j + 1][1] - c[j][1]) * ky;
+        const L2 = dx * dx + dy * dy, t = L2 ? clamp(-(ax * dx + ay * dy) / L2, 0, 1) : 0, d = Math.hypot(ax + dx * t, ay + dy * t);
+        if(!best || d < best.off) best = {off: d, j, t};
+      }
+    };
+    scan(vi - 60, vi + 500);                              /* primeiro perto de onde estava */
+    if(!best || best.off > 400){ best = null; scan(0, n - 1); }   /* ficou longe: olha o caminho inteiro */
+    vi = best.j;
+    return {off: best.off, d: R.cumDist[best.j] + (R.cumDist[best.j + 1] - R.cumDist[best.j]) * best.t, t: R.cumDur[best.j] + (R.cumDur[best.j + 1] - R.cumDur[best.j]) * best.t};
+  }
+  const here = () => { let i = 0; S.samples.forEach((s, q) => { if(Math.abs(s.dist - last.sp.d) < Math.abs(S.samples[i].dist - last.sp.d)) i = q; }); return i; };
+  const cond = p => p.klass >= 1 ? `${cap(rainPhrase(p.catIf, p.amt))} ${KLASS[p.klass]}, ${pct(p.pop)} de chance` : (p.fog ? 'Neblina possível' : 'Sem chuva');
+  function flags(j){
+    const p = S.trip.pts[j], s = S.samples[j], out = [];
+    if(s.pista === 'simples') out.push('pista simples');
+    if(s.unpaved) out.push('sem pavimento');
+    if(s.rcls === 2) out.push('serra');
+    if(p.fog && p.klass >= 1) out.push('neblina possível');
+    if(p.thunder) out.push('trovoadas possíveis');
+    const tc = Traf.at(j);
+    if(tc === 2) out.push('trânsito congestionado'); else if(tc === 1) out.push('trânsito lento');
+    if(p.night) out.push('noite');
+    return out;
+  }
+  /* o que merece aviso num trecho, ou '' */
+  function hazard(j){
+    const p = S.trip.pts[j], s = S.samples[j], single = s.pista === 'simples';
+    if(p.klass >= 2 && p.catIf >= 2) return `${rainPhrase(p.catIf, p.amt)} ${KLASS[p.klass]}${single ? ', em pista simples' : ''}`;
+    if(p.fog) return `neblina possível${single ? ', em pista simples' : ''}`;
+    if(Traf.at(j) === 2) return 'trânsito congestionado';
+    if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
+    return '';
+  }
+  function render(){
+    const box = $('#live'), btn = $('#live-btn');
+    btn.hidden = !S.trip || !!S.demo;
+    btn.setAttribute('aria-pressed', String(on()));
+    btn.querySelector('span').textContent = on() ? 'Parar o acompanhamento' : 'Acompanhar a viagem';
+    if(!on() && !msg){ box.hidden = true; return; }
+    box.hidden = false;
+    if(!on()){ box.innerHTML = `<p class="live-warn">${esc(msg)}</p>`; return; }
+    if(!last || !S.trip){ box.innerHTML = `<p class="live-now">${esc(msg || 'Procurando a sua posição…')}</p>`; return; }
+    const trip = S.trip, pts = trip.pts, N = pts.length, now = Date.now(), i = here();
+    let h = `<p class="live-now"><strong>Agora:</strong> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}${trip.arr > now ? `, em ${durText((trip.arr - now) / 1000)}` : ''}.</p>`;
+    if(last.sp.off > 300) h += `<p class="live-warn">Você está a ${kmText(last.sp.off)} do caminho traçado. As horas abaixo valem para o ponto mais próximo dele.</p>`;
+    const rows = [];
+    for(const m of (S.routeMode === 'car' ? [10, 30, 60] : [5, 15, 30])){
+      const tt = now + m * MIN;
+      if(tt > trip.arr) break;
+      let j = i;
+      for(let q = i; q < N; q++) if(Math.abs(pts[q].t - tt) < Math.abs(pts[j].t - tt)) j = q;
+      const fl = flags(j);
+      rows.push(`<li><span>em ${m} min</span><div><b>${esc(cond(pts[j]))}</b><small>${esc(cap(perto(pts, j)))}${fl.length ? '; ' + esc(fl.join('; ')) : ''}</small></div></li>`);
+    }
+    if(rows.length) h += `<ul>${rows.join('')}</ul>`;
+    let alert = '';
+    for(let q = i + 1; q < N && !alert; q++){
+      const hz = hazard(q);
+      if(hz && pts[q].t > now) alert = `Próximo aviso: em ${minText((pts[q].t - now) / MIN)}, ${hz}, ${perto(pts, q)}.`;
+    }
+    h += alert ? `<p class="live-alert">${esc(alert)}</p>` : '<p class="live-calm">Nenhum aviso no caminho à frente.</p>';
+    /* quando cada dado foi atualizado pela última vez */
+    const ups = [];
+    if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
+    if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
+    if(S.wxAt) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
+    if(note) h += `<p class="live-calm">${esc(note)}</p>`;
+    box.innerHTML = h;
+  }
+  function fix(pos){
+    if(!S.route || !S.trip || !on()) return;
+    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now();
+    last = {lon, lat, acc: pos.coords.accuracy, sp, at: now}; msg = '';
+    MapCtl.me(lon, lat);
+    /* o trecho em que estou passa a ser "agora": desloca o horário de saída, no máximo uma vez por minuto */
+    const depEff = now - sp.t * 1000 * (1 + S.slack);
+    const gap = Math.abs(depEff - S.departMs);           /* diferença entre o relógio da viagem e a posição real */
+    if(sp.off <= 2000 && gap > 90 * 1000 && (now - lastShift > 60 * 1000 || gap > 5 * MIN) && !S.busy){
+      lastShift = now;
+      const d = new Date(depEff);
+      els.date.value = isoLocal(depEff); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      if(wxOk()) recompute(); else applyWhen();
+    }
+    const i = here();
+    if(i !== S.scrub) setScrub(i, {pan: false});
+    render();
+  }
+  /* trecho em que estou passa a ser "agora": acerta o horário de saída e recalcula, sem consulta nova */
+  function reanchor(){
+    if(!last || !S.route) return;
+    const depEff = Date.now() - last.sp.t * 1000 * (1 + S.slack), d = new Date(depEff);
+    lastShift = Date.now();
+    els.date.value = isoLocal(depEff); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if(wxOk()) recompute(); else applyWhen();
+  }
+  /* saí do caminho traçado: nova consulta a partir de onde estou */
+  async function replanFromHere(){
+    if(!last || S.busy) return;
+    replans++;
+    S.pick.from = {label: 'Minha localização', detail: '', lat: last.lat, lon: last.lon};
+    els.from.value = 'Minha localização';
+    const d = new Date();
+    els.date.value = isoLocal(d.getTime()); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    note = `Rota refeita a partir da sua posição às ${hhmm(Date.now())}.`;
+    await plan({keep: true, live: true});
+  }
+  /* a cada 20 s, vê o que está na hora de atualizar. Uma coisa de cada vez. */
+  async function tick(){
+    if(!on() || working || S.busy || !last || !S.trip) return;
+    const now = Date.now();
+    working = true;
+    try{
+      if(last.sp.off > EVERY.far){ if(!offSince) offSince = now; } else offSince = 0;
+      const canReplan = now - due.replan > EVERY.replan && replans < 8;
+      if(offSince && now - offSince > EVERY.off){
+        if(canReplan){ due.replan = now; offSince = 0; await replanFromHere(); return; }
+        note = replans >= 8 ? 'Você segue fora do caminho traçado. O app já refez a rota 8 vezes nesta viagem e parou de refazer sozinho; refaça a consulta se quiser.' : note;
+      }
+      if(S.route.google && S.route.drive && last.sp.off <= EVERY.far && now - due.traf > EVERY.traf){
+        due.traf = now;
+        try{
+          const r = await Traf.live({lat: last.lat, lon: last.lon}, last.sp.d);
+          if(r === 'replan' && canReplan){ due.replan = now; await replanFromHere(); return; }
+          if(r === 'same'){ last.sp = snap(last.lon, last.lat); reanchor(); if(/trânsito/.test(note)) note = ''; }
+        }catch(e){ note = `Não deu para atualizar o trânsito agora (${(e && e.message) || 'sem resposta'}).`; }
+      }
+      if(Goog.getKey() && now - due.goog > EVERY.goog){
+        due.goog = now;
+        try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ renderVerdict(); renderReadout(); renderRuler(); renderList(); } }
+        catch(e){ note = `Não deu para atualizar a chuva pelo Google agora (${(e && e.message) || 'sem resposta'}).`; }
+      }
+      if(now - (S.wxAt || 0) > EVERY.wx){
+        try{ await refreshWeather(); }
+        catch(e){ S.wxAt = now - EVERY.wx + 20 * MIN; note = 'Não deu para atualizar os modelos agora; o app tenta de novo em 20 minutos.'; }
+      }
+    } finally { working = false; render(); }
+  }
+  function fail(e){
+    msg = e && e.code === 1 ? 'O app não tem permissão para ver a localização. Libere a localização para este site nas configurações do navegador.'
+      : 'Sem sinal de localização agora. O acompanhamento continua tentando.';
+    if(e && e.code === 1) stop(true); else render();
+  }
+  async function keepAwake(){ try{ if('wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); }catch(_){ /* sem trava de tela: segue assim mesmo */ } }
+  function start(){
+    if(on() || !S.trip) return;
+    if(!('geolocation' in navigator) || window.isSecureContext === false){ msg = 'A localização só funciona com o app aberto num endereço seguro (https) ou instalado.'; render(); return; }
+    msg = ''; note = ''; last = null; vi = 0; lastShift = 0; offSince = 0; replans = 0;
+    /* o trânsito é refeito logo na primeira posição; a chuva do Google, quando a guardada tiver mais de 15 minutos */
+    due = {traf: 0, goog: (S.goog && S.goog.when) || 0, replan: 0};
+    watch = navigator.geolocation.watchPosition(fix, fail, {enableHighAccuracy: true, maximumAge: 5000, timeout: 30000});
+    timer = setInterval(tick, EVERY.tick);
+    keepAwake(); render();
+  }
+  function stop(keepMsg){
+    if(watch != null){ navigator.geolocation.clearWatch(watch); watch = null; }
+    if(timer){ clearInterval(timer); timer = null; }
+    if(lock){ try{ lock.release(); }catch(_){ /* já solta */ } lock = null; }
+    if(!keepMsg) msg = '';
+    last = null; MapCtl.meOff(); render();
+  }
+  document.addEventListener('visibilitychange', () => { if(on() && document.visibilityState === 'visible') keepAwake(); });
+  /* depois de uma rota refeita: a busca do ponto mais próximo recomeça do início do novo caminho */
+  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); };
+  /* só para os testes: encurta os intervalos */
+  const _every = o => { Object.assign(EVERY, o); if(timer){ clearInterval(timer); timer = setInterval(tick, EVERY.tick); } };
+  return {on, start, stop, render, rebase, _every, toggle: () => (on() ? stop() : start())};
+})();
+
 /* acesso para testes e diagnóstico */
-window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Budget, detMembers};
+window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers};
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
