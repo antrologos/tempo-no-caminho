@@ -1,6 +1,6 @@
 {
   "name": "tempo-no-caminho",
-  "version": "3.6.0",
+  "version": "3.7.0",
   "private": true,
   "description": "Previsão do tempo ao longo de um trajeto: chuva, pista, serra e trânsito em cada trecho, na hora em que você passa por ele.",
   "license": "MIT",
