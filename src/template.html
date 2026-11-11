@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Tempo no caminho</title>
+<meta name="description" content="Previsão do tempo ao longo de um trajeto: a chance e a força da chuva em cada trecho, na hora em que você passa por ele.">
+<meta name="theme-color" content="#F1F3F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1317" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="No caminho">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='12' y='12' width='40' height='40' rx='7' transform='rotate(45 32 32)' fill='%23F5C211' stroke='%231A1600' stroke-width='3'/%3E%3Cpath d='M32 19c7 8.6 11.4 15 11.4 21.4a11.4 11.4 0 0 1-22.8 0C20.600 34 25 27.600 32 19z' fill='none' stroke='%231A1600' stroke-width='3.600' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-sun" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.4"/><path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M4.5 15.5l1.4-1.4M14.1 5.9l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 20 20"><path d="M16 11.8A6.6 6.6 0 0 1 8.2 4a6.6 6.6 0 1 0 7.8 7.8z"/></symbol>
+    <symbol id="i-partly" viewBox="0 0 20 20"><circle cx="6.6" cy="6.8" r="2.5"/><path d="M6.6 1.9v1.2M1.7 6.8h1.2M3.1 3.3l.9.9M10.1 3.3l-.9.9"/><path d="M7.6 16.2h6.9a2.7 2.7 0 0 0 .4-5.37 3.9 3.9 0 0 0-7.5.8 2.3 2.3 0 0 0 .2 4.57z"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 20 20"><path d="M5.8 14.6h8.6a3.2 3.2 0 0 0 .45-6.37 4.6 4.6 0 0 0-8.9.95 2.75 2.75 0 0 0-.15 5.42z"/></symbol>
+    <symbol id="i-rain" viewBox="0 0 20 20"><path d="M5.8 11.6h8.6a3.2 3.2 0 0 0 .45-6.37 4.6 4.6 0 0 0-8.9.95 2.75 2.75 0 0 0-.15 5.42z"/><path d="M7.6 14.2l-.8 2.4M11.4 14.2l-.8 2.4"/></symbol>
+    <symbol id="i-rain-heavy" viewBox="0 0 20 20"><path d="M5.8 10.8h8.6a3.2 3.2 0 0 0 .45-6.37 4.6 4.6 0 0 0-8.9.95 2.75 2.75 0 0 0-.15 5.42z"/><path d="M6.6 13.2l-1.2 4M10.2 13.2l-1.2 4M13.8 13.2l-1.2 4"/></symbol>
+    <symbol id="i-storm" viewBox="0 0 20 20"><path d="M5.8 10.8h8.6a3.2 3.2 0 0 0 .45-6.37 4.6 4.6 0 0 0-8.9.95 2.75 2.75 0 0 0-.15 5.42z"/><path d="M10.8 12.4l-2.3 3.1h3l-2 3"/></symbol>
+    <symbol id="i-fog" viewBox="0 0 20 20"><path d="M5.8 10.2h8.6a3.2 3.2 0 0 0 .45-6.37 4.6 4.6 0 0 0-8.9.95 2.75 2.75 0 0 0-.15 5.42z"/><path d="M4 13.4h12M5.6 16.4h8.8"/></symbol>
+    <symbol id="i-wind" viewBox="0 0 20 20"><path d="M2.6 8h8.6a2.2 2.2 0 1 0-2.1-2.9M2.6 11.4h12.2a2.3 2.3 0 1 1-2.2 3M2.6 14.8h5.6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M10 6v4.3l2.7 1.7"/></symbol>
+    <symbol id="i-info" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M10 9.2v4.4M10 6.4v.2"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.2"/><circle cx="10" cy="10" r="1.3" fill="currentColor"/><path d="M10 2v2.8M10 15.2V18M2 10h2.8M15.2 10H18"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 20 20"><path d="M6.4 3.4v12.6M6.4 3.4L3.4 6.5M6.4 3.4l3 3.1M13.6 16.6V4M13.6 16.6l-3-3.1M13.6 16.6l3-3.1"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 20 20"><path d="M10 3.2c2.6 3.2 4.3 5.6 4.3 8a4.3 4.3 0 0 1-8.6 0c0-2.4 1.7-4.8 4.3-8z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 20 20"><path d="M3.5 10h13M12 5.5l4.5 4.5-4.5 4.5"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 20 20"><path d="M3.5 16.5l.7-3.4 8.9-8.9a1.9 1.9 0 0 1 2.7 2.7l-8.9 8.9-3.4.7zM11.8 5.5l2.7 2.7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></symbol>
+    <symbol id="i-road" viewBox="0 0 20 20"><path d="M6.500 3.500L4 16.500M13.500 3.500l2.500 13M10 4v2.200M10 9v2.200M10 14v2.200"/></symbol>
+    <symbol id="i-relief" viewBox="0 0 20 20"><path d="M2.5 15.5l5-8.2 3 4.700 2.2-3 4.800 6.500z"/></symbol>
+    <symbol id="i-star" viewBox="0 0 20 20"><path d="M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.800 8.100l5-.7z"/></symbol>
+  </defs>
+</svg>
+
+<div class="app" id="app">
+  <div class="masthead">
+    <header class="top">
+      <span class="sign" aria-hidden="true"><svg class="ic"><use href="#i-drop"/></svg></span>
+      <h1 class="brand">Tempo no caminho</h1>
+      <p class="tagline">A chance e a força da chuva em cada trecho, na hora em que você passa por ele.</p>
+    </header>
+    <div class="banner" id="banner" hidden>
+      <p><strong>Exemplo com dados inventados.</strong> <span class="banner-more">Este ambiente bloqueou o acesso aos serviços de mapa, rota e previsão (é o que acontece dentro do Claude). Publique os arquivos e abra pelo navegador para usar com dados reais.</span></p>
+      <button type="button" id="retry" class="link">Tentar conectar de novo</button>
+    </div>
+  </div>
+
+  <section class="plan" id="plan" aria-label="Planejar a viagem">
+    <button type="button" class="pill" id="pill" aria-label="Editar a viagem">
+      <span class="pill-text"><b id="pill-od"></b><small id="pill-when"></small></span>
+      <svg class="ic" aria-hidden="true"><use href="#i-edit"/></svg>
+    </button>
+    <div class="plan-body" id="plan-body">
+      <div class="plan-brand">
+        <span class="sign" aria-hidden="true"><svg class="ic"><use href="#i-drop"/></svg></span>
+        <b>Tempo no caminho</b>
+        <button type="button" class="inbtn plan-close" id="plan-close" aria-label="Fechar o formulário" hidden><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+
+      <div class="saved" id="saved" hidden>
+        <span class="saved-label">Viagens salvas</span>
+        <div class="saved-list" id="saved-list"></div>
+      </div>
+
+      <div class="od">
+        <div class="od-rail" aria-hidden="true"><span class="dot dot-a"></span><span class="od-line"></span><span class="dot dot-b"></span></div>
+        <div class="od-fields">
+          <div class="field">
+            <label for="from">De</label>
+            <div class="inwrap">
+              <input id="from" class="input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="next" placeholder="Cidade, endereço ou lugar" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="from-list">
+              <button type="button" id="locate" class="inbtn" aria-label="Usar minha localização" title="Usar minha localização"><svg class="ic"><use href="#i-locate"/></svg></button>
+            </div>
+            <ul id="from-list" class="options" role="listbox" aria-label="Sugestões de partida" hidden></ul>
+          </div>
+          <div class="field">
+            <label for="to">Para</label>
+            <div class="inwrap">
+              <input id="to" class="input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" placeholder="Cidade, endereço ou lugar" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="to-list">
+              <button type="button" id="swap" class="inbtn" aria-label="Inverter partida e chegada" title="Inverter partida e chegada"><svg class="ic"><use href="#i-swap"/></svg></button>
+            </div>
+            <ul id="to-list" class="options" role="listbox" aria-label="Sugestões de chegada" hidden></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="when">
+        <div class="field"><label for="date">Dia</label><input id="date" class="input" type="date"></div>
+        <div class="field"><label for="time">Saída</label><input id="time" class="input" type="time" step="300"></div>
+      </div>
+
+      <fieldset class="seg" id="mode-seg">
+        <legend>Como você vai</legend>
+        <div class="seg-row">
+          <label><input type="radio" name="mode" value="car" checked><span>Carro</span></label>
+          <label><input type="radio" name="mode" value="moto"><span>Moto</span></label>
+          <label><input type="radio" name="mode" value="bike"><span>Bicicleta</span></label>
+          <label><input type="radio" name="mode" value="foot"><span>A pé</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="seg" id="slack-seg">
+        <legend>Folga para trânsito e paradas</legend>
+        <div class="seg-row">
+          <label><input type="radio" name="slack" value="0" checked><span>Nenhuma</span></label>
+          <label><input type="radio" name="slack" value="0.1"><span>+10%</span></label>
+          <label><input type="radio" name="slack" value="0.2"><span>+20%</span></label>
+          <label><input type="radio" name="slack" value="0.3"><span>+30%</span></label>
+        </div>
+      </fieldset>
+
+      <button type="button" id="go" class="go">Ver o tempo no caminho</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p id="error" class="error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <main class="layout" id="layout" data-sheet="peek">
+    <div class="sheetbar" id="sheetbar" role="group" aria-label="Quanto do painel mostrar">
+      <button type="button" data-sheet="peek" aria-pressed="true">Resumo</button>
+      <button type="button" data-sheet="half" aria-pressed="false">Gráfico</button>
+      <button type="button" data-sheet="full" aria-pressed="false">Detalhes</button>
+    </div>
+
+    <section class="head" id="head" aria-live="polite">
+      <div class="empty" id="empty">
+        <p class="empty-lead">Diga de onde sai, para onde vai e quando.</p>
+        <p class="empty-sub">A rota aparece colorida pela chuva prevista para a hora em que você passa por cada trecho, com a chance de ela acontecer.</p>
+      </div>
+      <div class="verdict" id="verdict" hidden>
+        <h2 id="v-head"></h2>
+        <div class="chips" id="v-chips"></div>
+        <div class="alerts" id="v-alerts"></div>
+        <p id="v-sub" class="v-sub"></p>
+        <p id="v-facts" class="facts"></p>
+        <button type="button" class="savebtn" id="save-trip" hidden><svg class="ic" aria-hidden="true"><use href="#i-star"/></svg><span>Salvar esta viagem</span></button>
+        <ul id="v-notes" class="notes"></ul>
+      </div>
+    </section>
+
+    <div class="pin" id="pin">
+      <div class="mapwrap" id="mapwrap">
+        <div id="map" class="map"></div>
+        <div class="layers" id="layers" hidden>
+          <div class="layer-chips" id="layer-chips" role="radiogroup" aria-label="O que mostrar na rota"></div>
+          <div class="layer-key" id="layer-key"></div>
+        </div>
+        <p class="mapnote" id="mapnote" hidden></p>
+      </div>
+      <div class="ruler" id="ruler" hidden>
+        <div class="readout" id="readout"></div>
+        <div class="chart" id="ruler-chart" tabindex="0" role="slider" aria-label="Ponto do trajeto" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+        <div class="legend" id="legend"></div>
+        <p class="cap" id="ruler-cap"></p>
+        <details class="models" id="models" hidden>
+          <summary>Comparar com os modelos detalhados</summary>
+          <p class="lede">Os quatro modelos de malha mais fina, um de cada centro: europeu (ECMWF), americano (GFS), alemão (ICON) e britânico (UKMO). Cada um é uma previsão só. Eles já entram no conjunto, junto com outros cinco modelos e as simulações.</p>
+          <div class="srcsel" id="srcsel" role="radiogroup" aria-label="Qual modelo detalhado mostrar" hidden></div>
+          <div class="chart" id="models-chart"></div>
+        </details>
+      </div>
+    </div>
+
+    <section class="depart" id="depart" hidden>
+      <h3>E se eu sair em outro horário?</h3>
+      <p class="lede">Minutos de viagem debaixo de chuva, em média, para cada horário de saída no mesmo dia. O traço fino mostra a faixa entre as simulações. Arraste o marcador amarelo ou toque numa barra.</p>
+      <div class="chart" id="depart-chart"></div>
+      <p class="cap" id="depart-cap"></p>
+    </section>
+
+    <section class="list" id="list" hidden>
+      <h3>Trecho a trecho</h3>
+      <ol id="rows" class="rows"></ol>
+    </section>
+
+    <section class="gsrc" id="prefs" hidden>
+      <h3>Detalhe da consulta</h3>
+      <label class="pref">Um trecho a cada
+        <select id="pref-step"><option value="5">5 minutos de viagem</option><option value="7">7 minutos de viagem</option><option value="10">10 minutos de viagem</option></select>
+      </label>
+      <p class="conf-status" id="pref-cost"></p>
+    </section>
+
+    <section class="gsrc" id="gsrc" hidden>
+      <h3>Segunda fonte: Google</h3>
+      <p class="lede">O Google tem uma previsão própria, feita com inteligência artificial e imagens de satélite. Com uma chave pessoal, ela aparece como uma linha no gráfico de chance, ao lado da previsão do app, e entra na conferência. A chave fica só neste aparelho.</p>
+      <div class="conf-btns">
+        <input type="password" id="gkey" class="gkey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Cole aqui a chave" aria-label="Chave do Google">
+        <button type="button" class="btn-conf" id="gkey-save">Salvar e testar</button>
+        <button type="button" class="btn-conf" id="gkey-clear" hidden>Remover a chave</button>
+      </div>
+      <label class="pref">Uso do Google
+        <select id="pref-guse">
+          <option value="eco">Econômico: até 17 pontos, limite de 9.000 chamadas por mês, sem cobrança</option>
+          <option value="full30">Completo: todos os trechos, limite de 30.000 por mês, até uns US$ 3</option>
+          <option value="full100">Completo: todos os trechos, limite de 100.000 por mês, até uns US$ 14</option>
+        </select>
+      </label>
+      <label class="pref">Rota e trânsito
+        <select id="pref-traf">
+          <option value="1">Rota do Google, com o tempo de trânsito</option>
+          <option value="2">Rota do Google, com tempo e intensidade do trânsito por trecho</option>
+          <option value="0">Rota do OpenStreetMap, sem trânsito</option>
+        </select>
+      </label>
+      <p class="conf-status" id="gtraf-status" role="status"></p>
+      <p class="conf-status" id="gkey-status" role="status"></p>
+      <p class="conf-status" id="gkey-usage"></p>
+    </section>
+
+    <section class="conf" id="conf" hidden>
+      <h3>Verificação das previsões</h3>
+      <p class="lede">O app guarda neste aparelho o que previu em cada consulta e, umas 7 horas depois da viagem, pode comparar com a chuva observada por satélite. Também pode testar os modelos nos últimos 10 dias do trajeto. Nada disso roda durante a consulta: só quando você toca nos botões.</p>
+      <div class="conf-btns">
+        <button type="button" class="btn-conf" id="conf-run">Verificar minhas consultas</button>
+        <button type="button" class="btn-conf" id="conf-retro">Testar com as chuvas dos últimos 10 dias</button>
+        <button type="button" class="btn-conf" id="conf-toggle" hidden>Desligar o ajuste</button>
+      </div>
+      <p class="conf-status" id="conf-status" role="status"></p>
+      <div id="conf-out"></div>
+      <button type="button" class="btn-conf" id="conf-copy" hidden>Copiar relatório</button>
+      <textarea class="conf-report" id="conf-report" readonly hidden rows="7" aria-label="Relatório da conferência"></textarea>
+    </section>
+
+    <section class="about" id="about">
+      <button type="button" class="install" id="install" hidden>Instalar o app neste aparelho</button>
+      <details>
+        <summary>Como ler e de onde vêm os dados</summary>
+        <div class="about-body">
+          <p><strong>O que o app faz.</strong> Traça a rota, calcula a que horas você passa por cada ponto e busca a previsão daquele ponto para aquela hora. Por isso a previsão muda ao longo do caminho.</p>
+          <p><strong>Modelo e simulação.</strong> Um modelo é o programa de previsão de um centro meteorológico. Cada centro publica uma previsão principal, detalhada. Como a atmosfera é sensível a pequenas diferenças, alguns centros também rodam o modelo dezenas de vezes, cada vez com um ponto de partida levemente alterado: são as simulações.</p>
+          <p><strong>O conjunto de previsões.</strong> O app junta tudo num conjunto só: 122 simulações de três centros (europeu, americano e alemão), com malha de uns 25 km, e os modelos detalhados de até nove centros, com malha de 9 a 25 km, mais a rodada da véspera dos quatro principais. As simulações medem melhor a incerteza; os modelos detalhados enxergam melhor a chuva isolada e os picos. Perto da viagem, cada modelo detalhado pesa como seis simulações; com três dias de antecedência, como duas.</p>
+          <p><strong>Vizinhança.</strong> A previsão de chuva isolada costuma errar um pouco o lugar e a hora. Por isso cada modelo detalhado entra com a hora de passagem e também com a hora vizinha e o trecho vizinho, com peso menor.</p>
+          <p><strong>Chance de chuva (gráfico de cima).</strong> É a fração do conjunto em que chove naquele trecho, naquela hora, com os pesos acima. A chance de chuva no caminho conta as previsões em que chove em qualquer ponto da viagem.</p>
+          <p><strong>Se chover, quanta chuva (gráfico de baixo).</strong> A barra cheia é o volume em geral previsto quando chove (a mediana das previsões com chuva); a parte clara vai até o volume dos casos mais fortes (só um décimo das previsões com chuva passa dele). O gráfico só mostra barras onde a chuva é ao menos possível, com 30% de chance ou mais. As faixas: garoa abaixo de 0,5 mm/h, fraca até 2, moderada de 2 a 6, forte de 6 a 15 e muito forte acima de 15.</p>
+          <p><strong>Chuva isolada ou generalizada.</strong> Os modelos informam que parte da chuva é do tipo convectivo, a que se forma com o calor e atinge áreas pequenas. Quando essa parte passa de 60%, o app chama de chuva isolada: atinge alguns pontos, por pouco tempo, pode ser forte e tem horário menos certo. Nesses casos, a leitura mostra o período de horas com risco naquele ponto. Abaixo de 30%, é chuva generalizada, ligada a frentes: cobre uma área grande, dura mais e é mais fácil de prever.</p>
+          <p><strong>Incerteza.</strong> As faixas mostradas, na força da chuva e nos minutos de chuva, vão do valor que 10% das previsões não alcançam ao que só 10% ultrapassam. São intervalos de previsão, não garantias, e costumam sair mais estreitos do que deveriam.</p>
+          <p><strong>Conferência.</strong> No fim desta tela, o app compara as previsões guardadas com a chuva observada por satélite (o produto IMERG, da NASA, com um ponto a cada 11 km, de meia em meia hora). A nota de erro vai de 0, perfeito, a 1. O satélite também erra, sobretudo em chuva fraca, então a nota é um guia e não uma sentença.</p>
+          <p><strong>Teste e ajuste.</strong> O teste compara as previsões que os modelos fizeram na véspera com a chuva observada nos últimos 10 dias, no próprio trajeto. Com dados reais, ele mostrou que os modelos avisam chuva mais vezes do que chove. O teste também calcula um ajuste que desconta esse excesso, medido em dias que ficaram de fora do cálculo. O ajuste é um experimento feito para este app, com poucos dias de dados: fica desligado, e as chances mostradas são as dos modelos, a menos que você o ligue.</p>
+          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha no gráfico e uma frase na leitura, para comparar, e entra na conferência. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
+          <p><strong>Modelos principais.</strong> Os quatro modelos de malha mais fina (ECMWF, GFS, ICON e UKMO) aparecem num quadro recolhido, para quem quiser comparar. Quando indicam algo mais forte do que o conjunto, o app avisa.</p>
+          <p><strong>De onde vêm os dados.</strong> As medições (estações, balões, aviões, navios, radares e, principalmente, satélites) são trocadas entre os países. Cada centro meteorológico usa essas medições para montar o retrato da atmosfera e rodar o seu modelo. Este app recebe as previsões de até nove centros (europeu, americano, alemão, britânico, coreano, canadense, australiano, chinês e francês) por um único distribuidor, o Open-Meteo. Onde há menos medições e mais chuva isolada, como em boa parte do Brasil, a hora e o lugar exatos da chuva são menos confiáveis.</p>
+          <p><strong>No mapa.</strong> A linha segue a estrada de verdade. A cor é a força da chuva; quanto menor a chance, mais apagada a cor, até o cinza de trecho seco. As etiquetas amarelas marcam trovoada, neblina ou vento forte possíveis: toque para ver a hora e o lugar.</p>
+          <p><strong>Limites.</strong> Nenhum desses modelos tem malha fina o bastante para prever cada chuva isolada: há um limite para a precisão de lugar e hora. Os pesos do conjunto são um ponto de partida, ainda não ajustado com observações brasileiras: a conferência serve para isso. O serviço gratuito de previsão aceita umas 15 consultas novas por dia neste aparelho; repetir a mesma consulta em até 40 minutos, ou trocar a data dentro de três dias, não gasta.</p>
+          <p><strong>Outras camadas.</strong> Os botões sobre o mapa trocam o que a linha mostra: chuva, vento, noite, neblina, trovoada, relevo ou tipo de pista. No gráfico, tudo aparece junto, uma faixa por assunto. O relevo tem três classes, medidas em trechos de cerca de 2 km: plano ou suave, ondulado (rampa média de 1% a 2,5%) e serra (rampa média de 2,5% ou mais, ou um trecho que sobe e desce com desnível equivalente). A altitude vem de um modelo de terreno com malha de 90 m, em até 200 pontos do trajeto. O tipo de pista vem dos dados de cada via no OpenStreetMap, lidos em dois pontos por trecho do caminho traçado: via de mão dupla numa pista só é pista simples; autoestrada ou via com sentidos separados é pista dupla. Onde o mapa não tem a via, o trecho fica sem informação. A qualidade depende de como a estrada foi cadastrada no mapa.</p>
+          <p><strong>Trechos e consultas.</strong> Você escolhe de quantos em quantos minutos de viagem vai um trecho: 5, 7 ou 10. Os modelos detalhados são pedidos em no máximo 48 pontos, porque a malha deles é de 9 a 25 km, e as simulações, uma vez por célula de 25 km. Cada consulta nova gasta por volta de 600 do limite gratuito diário de 10.000 do Open-Meteo, que não pede cadastro nem cartão.</p>
+          <p><strong>Rota e trânsito.</strong> Com a chave do Google, o caminho, a distância e o tempo de viagem são calculados pelo Google (Routes API, que precisa estar ativada no projeto e liberada na chave). De carro, o tempo já considera o trânsito previsto para o horário de saída; ao trocar o horário, o app pede o tempo de novo, sem buscar outra vez a previsão do clima. Na opção com intensidade, o Google informa onde o trânsito deve estar livre, lento ou parado, o que vira uma camada no mapa e uma faixa no gráfico; o app reparte o atraso entre os trechos lentos e parados por uma regra própria, e o tempo total é sempre o do Google. O gráfico de outros horários de saída usa o tempo de viagem do horário escolhido. O Google não informa se a pista é simples ou dupla: essa estimativa continua vindo do OpenStreetMap e é levada para o caminho do Google onde os dois traçados coincidem. Sem chave, ou se o Google falhar, o caminho é o do OpenStreetMap, sem trânsito, e o app avisa.</p>
+          <p><strong>Tempo de viagem.</strong> A rota vem do OpenStreetMap e não enxerga trânsito ao vivo, obras nem paradas. Use a folga para aproximar da sua realidade. Os horários seguem o fuso do seu aparelho.</p>
+          <p><strong>Prazo.</strong> Quanto mais distante a data, menos confiáveis são a hora e o lugar exatos da chuva. Além de dois ou três dias, vale mais a tendência do que o detalhe. Confira de novo perto da saída.</p>
+          <p><strong>O que não aparece aqui.</strong> Interdições, quedas de barreira, alagamentos e avisos oficiais. Antes de pegar a estrada, veja os alertas do INMET e da Defesa Civil e as condições da rodovia com a PRF ou a concessionária.</p>
+          <p><strong>Instalar e guardar.</strong> No Android, abra o menu do navegador e escolha instalar o app ou adicionar à tela inicial. As viagens salvas ficam só neste aparelho. Sem conexão, o app mostra a última previsão que baixou para a mesma viagem.</p>
+          <p class="credits">Segunda fonte, quando há chave: Google Weather API. Previsão: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0). Rota: <a href="https://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> nos servidores da FOSSGIS. Busca de lugares: <a href="https://photon.komoot.io/" target="_blank" rel="noopener">Photon</a>. Mapa: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> e <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a>. Dados de mapa © colaboradores do <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</p>
+        </div>
+      </details>
+    </section>
+  </main>
+</div>
+
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>

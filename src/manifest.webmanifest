@@ -1,0 +1,20 @@
+{
+  "name": "Tempo no caminho",
+  "short_name": "No caminho",
+  "description": "Previsão do tempo ao longo de um trajeto: a chance e a força da chuva em cada trecho, na hora em que você passa por ele.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#151A20",
+  "theme_color": "#151A20",
+  "categories": ["weather", "travel", "navigation"],
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
