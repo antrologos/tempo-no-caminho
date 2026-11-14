@@ -419,8 +419,9 @@ const Conf = (() => {
     const tg = $('#conf-toggle');
     tg.hidden = !(c && c.ok); tg.textContent = Calib.isOff() ? 'Ligar o ajuste (experimento)' : 'Desligar o ajuste';
     box.hidden = !S.trip;
-    const gs = $('#gsrc'); if(gs) gs.hidden = !S.trip || !!S.demo;
-    const pf = $('#prefs'); if(pf) pf.hidden = !S.trip || !!S.demo;
+    /* a chave do Google e os ajustes ficam no menu, sempre à mão */
+    const gs = $('#gsrc'); if(gs) gs.hidden = false;
+    const pf = $('#prefs'); if(pf) pf.hidden = false;
     window.dispatchEvent(new Event('tnc-goog'));
   }
   function report(){

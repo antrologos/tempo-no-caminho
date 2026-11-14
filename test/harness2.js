@@ -114,6 +114,7 @@ function photon(u, opt) {
   if (q.includes('paulo')) feats.push(F('São Paulo', -48.73, -22.07, { osm_key: 'boundary', osm_value: 'administrative', type: 'state' }));
   if (q.includes('rio')) feats.push(F('Rio de Janeiro', -43.1790, -22.9030, { state: 'Rio de Janeiro' }), F('Rio das Ostras', -41.9450, -22.5270, { state: 'Rio de Janeiro' }), F('Rio Claro', -47.5610, -22.4110, { state: 'São Paulo' }));
   if (q.includes('paulo') || q.includes('sp')) feats.push(F('São Paulo', -46.6330, -23.5500, { state: 'São Paulo' }), F('Aeroporto de São Paulo/Congonhas', -46.6560, -23.6270, { street: 'Avenida Washington Luís', city: 'São Paulo', state: 'São Paulo', osm_key: 'aeroway', osm_value: 'aerodrome', type: 'house' }));
+  if (q.includes('resende')) feats.push(F('Resende', -44.4500, -22.4700, { state: 'Rio de Janeiro' }));
   if (q.includes('barra')) feats.push(F('Barra da Tijuca', -43.3650, -23.0005, { city: 'Rio de Janeiro', state: 'Rio de Janeiro', osm_value: 'suburb', type: 'district' }));
   return { type: 'FeatureCollection', features: feats };
 }
@@ -329,11 +330,29 @@ async function open(opt = {}) {
           if (og) { let k0 = 0, bd = Infinity; pts.forEach((c, q) => { const d = Math.hypot((c[0] - og.longitude) * 102000, (c[1] - og.latitude) * 110540); if (d < bd) { bd = d; k0 = q; } });
             if (k0 > 3) { const hv = (a, b) => Math.hypot((a[0] - b[0]) * 102000, (a[1] - b[1]) * 110540); let tot = 0, rest = 0; for (let q = 1; q < pts.length; q++) { const d = hv(pts[q - 1], pts[q]); tot += d; if (q > k0) rest += d; } frac = rest / tot; pts.splice(0, k0); steps.length = 0; steps.push({ distanceMeters: Math.round(base.distance * frac), staticDuration: Math.round(base.duration * frac) + 's', navigationInstruction: { instructions: 'Continue na BR-116' } }); }
             if (opt.liveDetour && k0 > 3) frac *= 1.3; }
-          const r = { distanceMeters: Math.round((opt.routesDist || base.distance) * frac), duration: Math.round(base.duration * frac * k * (opt.liveJam && k0s(og) ? 1.5 : 1)) + 's', staticDuration: Math.round(base.duration * frac) + 's', polyline: { encodedPolyline: encodePolyline(pts, 5) }, legs: [{ steps }] };
+          const r = { distanceMeters: Math.round((opt.routesDist || base.distance) * frac), duration: Math.round(base.duration * frac * k * (opt.liveJam && k0s(og) ? 1.5 : 1)) + 's', staticDuration: Math.round(base.duration * frac) + 's', polyline: { encodedPolyline: encodePolyline(pts, 5) }, legs: [{ distanceMeters: 0, steps }] };
           if ((body.extraComputations || []).includes('TRAFFIC_ON_POLYLINE')) {
             const n = pts.length, a = Math.round(n * 0.06), b = Math.round(n * 0.9);
             r.travelAdvisory = { speedReadingIntervals: [{ endPolylinePointIndex: a, speed: 'TRAFFIC_JAM' }, { startPolylinePointIndex: a, endPolylinePointIndex: b, speed: 'NORMAL' }, { startPolylinePointIndex: b, endPolylinePointIndex: n - 1, speed: 'SLOW' }] };
           }
+          r.description = 'BR-116';
+          const inter = body.intermediates || [], stop = inter.filter(w => !w.via), pass = inter.filter(w => w.via);
+          /* uma rota alternativa: o mesmo caminho, desviado para o norte ou para o sul no meio, mais longo e mais lento */
+          const variant = (shift, kd, kt, desc) => { const n = pts.length, g = pts.map((c, q) => { const f = Math.min(1, Math.max(0, (q / (n - 1) - 0.25) / 0.5)); return [c[0], c[1] + shift * Math.sin(Math.PI * f)]; });
+            const sc = v => Math.round(parseFloat(v) * kt) + 's';
+            return Object.assign({}, r, { description: desc, distanceMeters: Math.round(r.distanceMeters * kd), duration: sc(r.duration), staticDuration: sc(r.staticDuration), polyline: { encodedPolyline: encodePolyline(g, 5) },
+              legs: [{ distanceMeters: Math.round(r.distanceMeters * kd), steps: r.legs[0].steps.map(st => Object.assign({}, st, { distanceMeters: Math.round(st.distanceMeters * kd), staticDuration: sc(st.staticDuration) })) }], travelAdvisory: undefined }); };
+          if (stop.length) {              /* com paradas: uma rota só, dividida em pernas */
+            const st = r.legs[0].steps, n = stop.length + 1, legs = [];
+            for (let k = 0; k < n; k++) { const part = st.slice(Math.floor(k * st.length / n), Math.floor((k + 1) * st.length / n)); legs.push({ distanceMeters: part.reduce((a, x) => a + x.distanceMeters, 0), steps: part }); }
+            r.legs = legs; return json({ routes: [r] });
+          }
+          if (pass.length) {              /* pontos de passagem: devolve a rota (recomendada ou alternativa) que passa por eles */
+            const a = pass[0].location.latLng; let bd = Infinity, base0 = null; pts.forEach(c => { const d = Math.hypot((c[0] - a.longitude) * 102000, (c[1] - a.latitude) * 110540); if (d < bd) { bd = d; base0 = c; } });
+            const off = a.latitude - base0[1];
+            return json({ routes: [bd < 1500 ? r : off > 0 ? variant(0.06, 1.06, 1.09, 'SP-070 e BR-116') : variant(-0.07, 1.15, 1.04, 'RJ-155')] });
+          }
+          if (body.computeAlternativeRoutes && !opt.noAlts) return json({ routes: [r, variant(0.06, 1.06, 1.09, 'SP-070 e BR-116'), variant(-0.07, 1.15, 1.04, 'RJ-155')] });
           return json({ routes: [r] }); } }
       if (u.hostname === 'weather.googleapis.com') { log.requests.push(url); if (opt.noGoogle) return route.abort(); const r = googleWeather(u, opt); return json(r.body, r.status); }
       if (u.hostname === 'previous-runs-api.open-meteo.com') { log.requests.push(url); if (opt.noPrev) return json({ error: true, reason: 'x' }, 400); const r = openMeteo(u, opt); return json(r.body, r.status); }
@@ -362,7 +381,7 @@ async function open(opt = {}) {
 }
 
 /* fluxo padrão: escolhe partida e chegada e pede a previsão */
-async function planTrip(page, { from = 'Rio de Jan', to = 'São Paulo', time = '12:30', dayOffset = 1, pickList = true } = {}) {
+async function planTrip(page, { from = 'Rio de Jan', to = 'São Paulo', time = '12:30', dayOffset = 1, pickList = true, confirm = true } = {}) {
   await page.waitForSelector('#go');
   await page.waitForTimeout(400);
   await page.click('#from'); await page.keyboard.type(from, { delay: 12 });
@@ -371,8 +390,10 @@ async function planTrip(page, { from = 'Rio de Jan', to = 'São Paulo', time = '
   if (pickList) { await page.waitForSelector('#to-list li', { timeout: 5000 }); await page.locator('#to-list li').first().dispatchEvent('pointerdown'); }
   const d = new Date(Date.now() + dayOffset * 864e5);
   const iso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
-  await page.evaluate(([iso, time]) => { const de = document.querySelector('#date'), te = document.querySelector('#time'); de.max = '2099-01-01'; de.value = iso; te.value = time; }, [iso, time]);
+  await page.evaluate(([iso, time]) => { const de = document.querySelector('#date'), te = document.querySelector('#time'); de.max = '2099-01-01'; de.value = iso; te.value = time; de.dispatchEvent(new Event('change', { bubbles: true })); te.dispatchEvent(new Event('change', { bubbles: true })); }, [iso, time]);
   await page.click('#go');
+  if (confirm) { await page.waitForSelector('#draft:not([hidden])', { timeout: 20000, state: 'attached' }); await page.waitForTimeout(250); await page.locator('#draft-go').click(); }
+  else return;
   await page.waitForSelector('#layout.has-trip', { timeout: 20000, state: 'attached' });
 }
 

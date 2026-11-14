@@ -25,7 +25,7 @@ const st = p => p.evaluate(() => { const { S } = window.__tempoNoCaminho; const 
     await p.locator('#from-list li').first().dispatchEvent('pointerdown'); await p.waitForTimeout(400);
     await p.locator('#to').fill('São Paulo'); await p.waitForTimeout(900);
     await p.locator('#to-list li').first().dispatchEvent('pointerdown'); await p.waitForTimeout(300);
-    await p.locator('#go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(2500);
+    await p.locator('#go').click(); await p.waitForSelector('#draft:not([hidden])', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(250); await p.locator('#draft-go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(2500);
     s = await st(p); console.log('DE ONDE ESTOU', JSON.stringify({ de: s.de, origem: s.origem, pill: s.pill, hash: s.hash, erro: s.erro }));
     await p.screenshot({ path: 'shots/v40-daqui.png' });
     // inverter: a chegada passa a ser a minha localização

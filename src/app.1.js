@@ -194,7 +194,8 @@ function featureToPlace(f){
 }
 
 function searchBias(){
-  const o = (S.pick && (S.pick.from || S.pick.to)) || S.from || S.to;
+  /* "minha localização" pode ainda estar sem coordenadas, à espera do GPS: usa o primeiro lugar que já tem */
+  const o = [S.pick && S.pick.from, S.pick && S.pick.to, S.from, S.to, typeof lastFix !== 'undefined' ? lastFix : null].find(q => q && isFinite(q.lat) && isFinite(q.lon));
   if(o) return {lat: o.lat, lon: o.lon, zoom: 6};
   return /^pt/i.test(navigator.language || '') ? {lat: -15.8, lon: -47.9, zoom: 4} : null;
 }
@@ -296,19 +297,33 @@ function buildRoute(r){
   return {coords, cumDist, cumDur, dist, dur, roads};
 }
 
-async function fetchRoute(a, b, profile){
+/* descrição curta de uma rota, pelas duas vias mais longas do caminho ("pela BR-116 e SP-070") */
+function routeDesc(route){
+  const len = {};
+  for(const r of (route.roads || [])) if(r.label) len[r.label] = (len[r.label] || 0) + (route.cumDist[r.to] - route.cumDist[r.from]);
+  const top = Object.keys(len).sort((x, y) => len[y] - len[x]).filter(k => len[k] >= route.dist * 0.08).slice(0, 2);
+  return top.length ? 'pela ' + top.join(' e ') : '';
+}
+/* devolve uma lista de rotas (a primeira é a recomendada); vias são as paradas, na ordem */
+async function fetchRoute(a, b, profile, vias = [], alts = false){
   let lastErr = null;
+  const pts = [a].concat(vias, [b]).map(p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(';');
   for(const base of API.osrm[profile]){
-    const url = `${base}/route/v1/driving/${a.lon.toFixed(6)},${a.lat.toFixed(6)};${b.lon.toFixed(6)},${b.lat.toFixed(6)}?overview=false&geometries=polyline6&steps=true`;
+    const url = `${base}/route/v1/driving/${pts}?overview=false&geometries=polyline6&steps=true${alts && !vias.length ? '&alternatives=true' : ''}`;
     try{
       const j = await getJSON(url, {timeout: 30000});
       if(j.code !== 'Ok' || !j.routes || !j.routes[0]){ const e = new Error(j.message || j.code || 'sem rota'); e.code = j.code; throw e; }
-      const built = buildRoute(j.routes[0]); built.base = base; return built;
+      return j.routes.slice(0, 3).map(r => {
+        const built = buildRoute(r); built.base = base;
+        let acc = 0;
+        built.legEnds = (r.legs || []).slice(0, -1).map(l => (acc += (l.distance || 0)));
+        return built;
+      });
     }catch(e){
       if(e.user) throw e;
       lastErr = e;
       const code = e.code || (e.body && e.body.code);
-      if(code === 'NoRoute' || code === 'NoSegment') throw new AppError('Não encontrei um caminho por terra entre esses dois pontos.');
+      if(code === 'NoRoute' || code === 'NoSegment') throw new AppError('Não encontrei um caminho por terra entre esses pontos.');
     }
   }
   throw new AppError('O serviço de rotas não respondeu. Tente de novo em instantes.' + (lastErr && lastErr.status === 429 ? ' (Muitas consultas seguidas.)' : ''));

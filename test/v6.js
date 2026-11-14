@@ -14,16 +14,18 @@ const snap = p => p.evaluate(() => { const { S, Calib, Goog } = window.__tempoNo
     await planTrip(o.page); await o.page.waitForTimeout(3000);
     console.log('SEM CHAVE', JSON.stringify(await snap(o.page)));
     await o.page.locator('#sheetbar button[data-sheet=full]').click(); await o.page.waitForTimeout(500);
-    await o.page.locator('#gkey').scrollIntoViewIfNeeded();
+    await o.page.evaluate(() => { document.querySelector('#drawer').hidden = false; }); await o.page.locator('#gkey').scrollIntoViewIfNeeded();
     await o.page.fill('#gkey', 'ruim'); await o.page.locator('#gkey-save').click(); await o.page.waitForTimeout(900);
     console.log('CHAVE RUIM:', await o.page.evaluate(() => document.querySelector('#gkey-status').textContent));
     await o.page.fill('#gkey', 'AIza-chave-de-teste'); await o.page.locator('#gkey-save').click(); await o.page.waitForTimeout(3500);
     console.log('CHAVE BOA:', await o.page.evaluate(() => document.querySelector('#gkey-status').textContent));
+    /* com a chave, a rota passa a ser a do Google: o app mostra o caminho e espera a confirmação */
+    await o.page.evaluate(() => { document.querySelector('#drawer').hidden = true; }); if (await o.page.evaluate(() => !document.querySelector('#draft').hidden)) { await o.page.locator('#draft-go').click(); await o.page.waitForTimeout(5000); }
     console.log('COM GOOGLE', JSON.stringify(await snap(o.page), null, 1));
     const gq = o.log.requests.filter(u => /weather\.googleapis/.test(u));
     console.log('pedidos ao Google:', gq.length, '| exemplo:', gq[gq.length - 1].replace(/key=[^&]+/, 'key=…').slice(0, 200));
-    await o.page.locator('#gsrc').scrollIntoViewIfNeeded(); await o.page.screenshot({ path: 'shots/v32-gsrc.png' });
-    await o.page.locator('#conf-retro').scrollIntoViewIfNeeded(); await o.page.locator('#conf-retro').click();
+    await o.page.evaluate(() => { document.querySelector('#drawer').hidden = false; }); await o.page.locator('#gsrc').scrollIntoViewIfNeeded(); await o.page.screenshot({ path: 'shots/v32-gsrc.png' });
+    await o.page.evaluate(() => { document.querySelector('#drawer').hidden = true; }); await o.page.locator('#sheetbar button[data-sheet=full]').click(); await o.page.waitForTimeout(400); await o.page.locator('#conf-retro').scrollIntoViewIfNeeded(); await o.page.locator('#conf-retro').click();
     await o.page.waitForFunction(() => !document.querySelector('#conf-retro').disabled, null, { timeout: 60000 }); await o.page.waitForTimeout(500);
     console.log('TESTE:', await o.page.evaluate(() => document.querySelector('#conf-status').textContent + ' || ' + document.querySelector('#conf-out').innerText.replace(/\n+/g, ' | ').slice(0, 1250)));
     let s = await snap(o.page); console.log('depois do teste: ajuste ligado?', s.calOn, '| chances', s.pops, '| botão:', await o.page.evaluate(() => document.querySelector('#conf-toggle').textContent));

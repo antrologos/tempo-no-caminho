@@ -14,10 +14,10 @@ const st = p => p.evaluate(() => { const { S } = window.__tempoNoCaminho; return
     await p.locator('#mapmenu button[data-act=from]').click(); await p.waitForTimeout(1500);
     s = await st(p); console.log('PARTIR DAQUI =>', JSON.stringify({ de: s.de, temViagem: s.temViagem }));
     await p.mouse.click(mb.x + mb.width * 0.7, mb.y + mb.height * 0.4, { button: 'right' }); await p.waitForTimeout(400);
-    await p.locator('#mapmenu button[data-act=to]').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 25000 }); await p.waitForTimeout(3000);
+    await p.locator('#mapmenu button[data-act=to]').click(); await p.waitForSelector('#draft:not([hidden])', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(250); await p.locator('#draft-go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 25000 }); await p.waitForTimeout(3000);
     s = await st(p); console.log('CHEGAR AQUI =>', JSON.stringify({ de: s.de, para: s.para, temViagem: s.temViagem, pill: s.pill, erro: s.erro }));
     await p.mouse.click(mb.x + mb.width * 0.5, mb.y + mb.height * 0.25, { button: 'right' }); await p.waitForTimeout(400);
-    await p.locator('#mapmenu button[data-act=via]').click(); await p.waitForTimeout(7000);
+    await p.locator('#mapmenu button[data-act=via]').click(); await p.waitForTimeout(3500); console.log('  rascunho depois de "passar por aqui":', await p.evaluate(() => document.querySelector('#draft').hidden ? 'oculto' : document.querySelector('#draft-facts').textContent.slice(0, 120))); await p.locator('#draft-go').click(); await p.waitForTimeout(6000);
     s = await st(p); console.log('PARAR AQUI =>', JSON.stringify({ paradas: s.paradas, pill: s.pill, erro: s.erro }));
     await p.screenshot({ path: 'shots/v42-desk.png' });
   } catch (e) { console.log('FALHA', e.message.slice(0, 300)); await p.screenshot({ path: 'shots/v42-fail.png' }); }
@@ -35,7 +35,7 @@ const st = p => p.evaluate(() => { const { S } = window.__tempoNoCaminho; return
     s = await st(p); console.log('PONTO ESCOLHIDO =>', JSON.stringify({ para: s.para, barra: s.barra }));
     await p.locator('#pill').click({ timeout: 800 }).catch(() => {});
     await p.click('#from'); await p.keyboard.type('Rio de Jan', { delay: 12 }); await p.waitForSelector('#from-list li', { timeout: 5000 }); await p.locator('#from-list li').first().dispatchEvent('pointerdown');
-    await p.click('#go'); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 25000 }); await p.waitForTimeout(4000);
+    await p.click('#go'); await p.waitForSelector('#draft:not([hidden])', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(250); await p.locator('#draft-go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 25000 }); await p.waitForTimeout(4000);
     await p.evaluate(() => { const d = document.querySelector('#date'); const t = new Date(Date.now() + 86400e3); d.value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); d.dispatchEvent(new Event('change', { bubbles: true })); });
     await p.waitForTimeout(4500); s = await st(p); console.log('CARTÕES DEPOIS DE MUDAR O DIA:', JSON.stringify(s.cartoes));
   } catch (e) { console.log('FALHA', e.message.slice(0, 300)); await p.screenshot({ path: 'shots/v42-fail2.png' }); }

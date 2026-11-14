@@ -46,7 +46,7 @@ const M = { viewport: { width: 390, height: 844 }, dpr: 2, touch: true };
     await p.click('#from'); await p.keyboard.type('Rio de Janeiro', { delay: 8 }); await p.waitForSelector('#from-list li');
     const opts = await p.evaluate(() => [...document.querySelectorAll('#from-list li')].map(l => l.innerText.replace(/\n+/g, ' / ')));
     await p.locator('#from-list li').first().dispatchEvent('pointerdown');
-    await p.fill('#to', 'São Paulo'); await p.click('#go'); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 20000 });
+    await p.fill('#to', 'São Paulo'); await p.click('#go'); await p.waitForSelector('#draft:not([hidden])', { state: 'attached', timeout: 20000 }); await p.waitForTimeout(250); await p.locator('#draft-go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 20000 });
     const route = log.requests.find(u => u.includes('/route/'));
     return { opcoes: opts, de: await p.inputValue('#from'), para: await p.inputValue('#to'), rota: route.match(/driving\/([^?]+)/)[1] };
   });

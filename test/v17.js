@@ -27,14 +27,14 @@ const st = p => p.evaluate(() => { const { S } = window.__tempoNoCaminho; return
     await p.locator('#pill').click(); await p.waitForTimeout(300);
     await p.locator('#via-add').click(); await p.waitForTimeout(200);
     await p.keyboard.type('Resende', { delay: 15 }); await p.waitForSelector('#vias .options li', { timeout: 5000 });
-    await p.locator('#vias .options li').first().dispatchEvent('pointerdown'); await p.waitForTimeout(7000);
+    await p.locator('#vias .options li').first().dispatchEvent('pointerdown'); await p.waitForTimeout(3000); await p.locator('#draft-go').click(); await p.waitForTimeout(6000);
     s = await st(p); console.log('COM PARADA', JSON.stringify({ vias: s.vias, viaDist: s.viaDist, alts: s.alts, pill: s.pill, marcadores: s.marcadores, hash: s.hash, erro: s.erro }));
     const body = o.log.posts ? null : null;
     // arrastar a parada para cima da partida: ela vira a partida
     await p.locator('#pill').click(); await p.waitForTimeout(300);
     const hb = await p.locator('#vias .grab').first().boundingBox(), fb = await p.locator('#from').boundingBox();
     await p.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2); await p.mouse.down(); await p.mouse.move(hb.x + hb.width / 2, fb.y - 10, { steps: 8 }); await p.mouse.up();
-    await p.waitForTimeout(7000);
+    await p.waitForTimeout(3000); await p.locator('#draft-go').click(); await p.waitForTimeout(6000);
     s = await st(p); console.log('PARADA ARRASTADA PARA O INÍCIO', JSON.stringify({ de: s.de, paradas: s.paradas, para: s.para, vias: s.vias, pill: s.pill, erro: s.erro }));
   } catch (e) { console.log('FALHA', e.message.slice(0, 400)); await p.screenshot({ path: 'shots/v41-fail.png' }); }
   console.log('erros:', errs(o)); await o.browser.close();

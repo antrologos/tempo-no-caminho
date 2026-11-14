@@ -84,6 +84,7 @@ function buildVerdict(trip){
   /* as chances da viagem inteira */
   if(et){
     chips.push({v: pct(et.pAny), l: 'de chance de chuva no caminho'});
+    S.pAnyNow = et.pAny;
     chips.push({v: pct(et.pMod), l: 'de chance de moderada ou forte'});
     if(et.minQ90 >= 1) chips.push({v: `${Math.round(et.minMean)} min`, l: `de chuva em média (de ${Math.round(et.minQ10)} a ${Math.round(et.minQ90)})`});
     if(et.pHeavy >= 0.05) notes.push({ic: 'rain-heavy', sign: true, html: `Em ${pct(et.pHeavy)} das previsões, a chuva chega a forte em algum ponto do caminho.`});
@@ -243,7 +244,8 @@ function factsText(trip){
     : S.slack ? `, já com ${Math.round(S.slack * 100)}% de folga` : ', sem contar trânsito';
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
-  const src = S.demo ? '' : ` Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const stops = !S.demo && S.vias && S.vias.length ? ` ${S.vias.length === 1 ? 'Parada' : 'Paradas'}: ${S.vias.map(v => v.label).join(', ')}.` : '';
+  const src = S.demo ? '' : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -336,7 +338,7 @@ function renderReadout(){
   const facts = [];
   if(k) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
   const gg = Goog.at(i, p.t);
-  if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
+  if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
   if(k >= 2 && p.regime === 'pancada'){
     const rw = riskWindow(i, p.t);
     facts.push(['Tipo', `chuva isolada${rw && rw.hours >= 2 ? `; neste ponto, o período de risco vai ${dasAs(rw.from, rw.to)}` : ''}`]);
@@ -366,7 +368,8 @@ function renderReadout(){
     `<div class="ro-place">${esc(name)}</div>` +
     `<div class="ro-where">${esc(where)}</div>` +
     `<div class="ro-cond"><i style="background:${dot}"></i><b>${cond}</b>${side ? `<span>${side}</span>` : ''}</div>` +
-    `<dl class="ro-facts">${facts.map(f => `<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>`;
+    `<dl class="ro-facts">${facts.map(f => `<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>` +
+    (gg ? '<details class="why"><summary>Por que o app e o Google diferem?</summary><p>A chance do app é a parte das previsões de vários centros em que chove neste trecho e hora. Ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para este ponto, já ajustada por ele. Nenhuma das duas é garantia: só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho.</p><p>No volume, o app mostra quanto os modelos preveem quando chove. O Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor.</p></details>' : '');
 }
 
 /* ---------- a régua do trajeto: hora em cima, lugar embaixo.
@@ -470,6 +473,9 @@ function renderRuler(){
 
   g += `<text class="t" x="${L}" y="${titleB}">${pts.some(p => p.ens) ? 'Se chover, quanta chuva (mm/h)' : 'Quanta chuva, em mm/h, pelos modelos'}</text>`;
   g += legendRow([[catColor(2), 'em geral'], [catColor(2), 'nos casos mais fortes', 0.3]], L, titleB + LEG - 1, pw);
+  /* o volume esperado pelo Google, como linha por cima das barras */
+  const gVol = pts.map((p, i) => { const q = Goog.at(i, p.t); return q && q.qpf != null ? q.qpf : null; });
+  if(gVol.some(v => v != null)) g += `<line x1="${L + pw - 58}" x2="${L + pw - 46}" y1="${titleB - 4}" y2="${titleB - 4}" stroke="${cssVar('--ink')}" stroke-width="2"/><text class="s" x="${L + pw}" y="${titleB}" text-anchor="end">Google</text>`;
   for(let v = 0; v <= ymax; v += step){
     const yy = Math.round(bot - v / ymax * ph) + 0.5;
     g += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${L + pw}" y1="${yy}" y2="${yy}"/><text x="${L - 7}" y="${yy + 4}" text-anchor="end">${v}</text>`;
@@ -479,6 +485,10 @@ function renderRuler(){
     if(ks[i] >= 2 && hi != null && hi >= 0.05 && (v == null || hi > v + 0.05)) g += `<rect x="${a}" y="${Y(hi)}" width="${w}" height="${f1(bot - Y(hi))}" fill="${catColor(Math.max(1, catOf(hi)))}" opacity=".3"/>`;
     if(ks[i] >= 2 && v != null && v >= 0.05) g += `<rect x="${a}" y="${Math.min(Y(v), bot - 1.5)}" width="${w}" height="${Math.max(1.5, f1(bot - Y(v)))}" fill="${catColor(Math.max(1, catOf(v)))}"/>`;
     if(v == null) g += `<rect x="${a}" y="${bot - 3}" width="${w}" height="3" fill="${none}" opacity=".8"/>`;
+  }
+  { let gd = '', pen = false;
+    pts.forEach((p, i) => { if(gVol[i] == null){ pen = false; return; } gd += (pen ? 'L' : 'M') + f1(clamp(X(p.t), L, L + pw)) + ' ' + Y(gVol[i]); pen = true; });
+    if(gd) g += `<path d="${gd}" fill="none" stroke="${cssVar('--surface')}" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/><path d="${gd}" fill="none" stroke="${cssVar('--ink')}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }
   if(!vals.some(v => v != null && v >= 0.05) && !tops.some(v => v != null && v >= 0.05) && pts.some(p => p.n > 0)){
     g += `<text x="${f1(L + pw / 2)}" y="${f1(top + ph / 2 + 4)}" text-anchor="middle">Sem chuva na grande maioria das previsões</text>`;
@@ -577,7 +587,7 @@ function renderRuler(){
   /* as cores das barras estão explicadas dentro do gráfico; aqui ficam só as faixas extras */
   $('#ruler-cap').innerHTML = (
     (nEns ? `<br><span>Chance calculada com ${nEns + nDet} previsões combinadas.</span>` : '') +
-    (hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura no gráfico de chance: a chance pelo Google</span>` : '') +
+    (hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura: Google. Em cima, a chance de chuva; embaixo, o volume esperado na hora, já descontada a chance de não chover.</span>` : '') +
     (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : Traf.row() ? '<br><span>Trânsito: o Google não informou a intensidade por trecho nesta consulta; o tempo de viagem já considera o trânsito.</span>' : '') +
     (windy ? `<br><span>Vento (rajadas):</span><span>${sw('--a1')}35 km/h ou mais</span><span>${sw('--a2')}50</span><span>${sw('--a3')}70</span>` : '') +
     (S.extra.road ? `<br><span>Pista:</span><span>${sw('--a2')}simples</span><span>${sw('--muted', 0.5)}dupla ou sentido único</span><span>${sw('--soft')}sem informação</span>` : '') +
@@ -792,7 +802,7 @@ function renderAll(){
   ['#verdict', '#ruler', '#depart', '#list'].forEach(s => { $(s).hidden = false; });
   $('#empty').hidden = true;
   $('#layout').classList.add('has-trip');
-  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render();
+  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render(); renderAlts();
   MapCtl.paint();
   updatePill();
 }

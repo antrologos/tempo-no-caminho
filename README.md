@@ -12,8 +12,9 @@ Experimental. A previsão de chuva hora a hora, num ponto, com um dia de anteced
 
 1. Abra o site e preencha partida e chegada. Qualquer uma das duas pode ser "Minha localização", lida pelo GPS do aparelho. O horário de saída começa em "agora" e não pode ficar no passado.
 2. Se quiser, inclua paradas (até 8; a ordem muda arrastando) ou marque os pontos no próprio mapa, tocando e segurando. Sem paradas, o app mostra também as rotas alternativas, e você escolhe por qual ir.
-3. Leia o resumo, o gráfico (chance de chuva em cima, volume embaixo) e a lista trecho a trecho.
-4. Opcional: em "Segunda fonte: Google", cole uma chave pessoal do Google Maps Platform com a Weather API e a Routes API liberadas. Com ela, o caminho e o tempo de viagem (com trânsito) passam a vir do Google, e a previsão do Google aparece ao lado da do app.
+3. Toque em "Traçar a rota". O app mostra o caminho e as rotas possíveis; a previsão só é buscada quando você confirma em "Ver o tempo neste caminho".
+4. Leia o resumo, o gráfico (chance de chuva em cima, volume embaixo) e a lista trecho a trecho.
+5. Opcional: no menu, em "Segunda fonte: Google", cole uma chave pessoal do Google Maps Platform com a Weather API e a Routes API liberadas. Com ela, o caminho e o tempo de viagem (com trânsito) passam a vir do Google, e a previsão do Google aparece ao lado da do app.
 
 ## Acompanhar a viagem
 
@@ -63,6 +64,10 @@ npx playwright install chromium
 python3 build.py
 npm test
 ```
+
+## Como atualizar o site
+
+O site publicado é o conteúdo da pasta `docs`. Para atualizar, basta substituir, **dentro da pasta `docs`**, os arquivos `index.html` e `sw.js` pelos novos. Arquivos enviados soltos na raiz do repositório não mudam o site.
 
 ## Publicar no GitHub Pages
 
