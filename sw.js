@@ -1,7 +1,7 @@
 /* Tempo no caminho: service worker.
    Guarda o app para abrir sem conexão e a última resposta de cada consulta,
    para que a mesma viagem reabra com a última previsão baixada. */
-const V = 'tnc-v7';
+const V = 'tnc-v9';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 const API_HOSTS = ['api.open-meteo.com', 'ensemble-api.open-meteo.com', 'previous-runs-api.open-meteo.com', 'routing.openstreetmap.de', 'router.project-osrm.org'];
 const PLACE_HOSTS = ['photon.komoot.io'];

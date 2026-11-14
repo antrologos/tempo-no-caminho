@@ -174,7 +174,10 @@ const Traf = (() => {
     return {coords, cumDist, cumDur, dist, dur, stat, roads, tcat: ivs && ivs.length ? tcat : null, google: true};
   }
 
-  async function route(a, b, profile, dep){
+  /* Pede as rotas ao Google. opt.vias: paradas, na ordem; opt.anchors: pontos de passagem que mantêm o caminho numa
+     rota alternativa já escolhida; opt.alts: pede também as alternativas (o Google só as dá quando não há paradas).
+     Devolve uma lista de rotas; a primeira é a recomendada. */
+  async function routes(a, b, profile, dep, opt = {}){
     const key = Goog.getKey(), md = mode();
     if(!key || !md) return null;
     const drive = profile === 'car', sku = drive ? md : 0;
@@ -182,8 +185,12 @@ const Traf = (() => {
     const pt = p => ({location: {latLng: {latitude: +p.lat.toFixed(6), longitude: +p.lon.toFixed(6)}}});
     const body = {origin: pt(a), destination: pt(b), travelMode: drive ? 'DRIVE' : profile === 'bike' ? 'BICYCLE' : 'WALK',
       polylineQuality: 'HIGH_QUALITY', polylineEncoding: 'ENCODED_POLYLINE', languageCode: 'pt-BR', units: 'METRIC'};
-    let mask = 'routes.distanceMeters,routes.duration,routes.staticDuration,routes.polyline.encodedPolyline,' +
-      'routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction.instructions';
+    const vias = opt.vias || [], anchors = vias.length ? [] : (opt.anchors || []);
+    if(vias.length) body.intermediates = vias.map(pt);
+    else if(anchors.length) body.intermediates = anchors.map(p => Object.assign(pt(p), {via: true}));
+    else if(opt.alts) body.computeAlternativeRoutes = true;
+    let mask = 'routes.distanceMeters,routes.duration,routes.staticDuration,routes.description,routes.polyline.encodedPolyline,' +
+      'routes.legs.distanceMeters,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.navigationInstruction.instructions';
     const when = Math.max(dep, Date.now() + 2 * MIN);
     if(drive){
       body.routingPreference = 'TRAFFIC_AWARE'; body.departureTime = new Date(when).toISOString();
@@ -194,12 +201,19 @@ const Traf = (() => {
     let j = null;
     try{ j = await res.json(); }catch(_){ /* corpo vazio */ }
     if(!res.ok) throw new Error((j && j.error && j.error.message) || 'HTTP ' + res.status);
-    const r = j && j.routes && j.routes[0];
-    if(!r || !r.polyline || !r.polyline.encodedPolyline) throw new Error('o Google não encontrou um caminho');
-    const out = build(r);
-    out.dep = when; out.sku = sku; out.drive = drive;
-    return out;
+    const list = ((j && j.routes) || []).filter(r => r && r.polyline && r.polyline.encodedPolyline).slice(0, 3);
+    if(!list.length) throw new Error('o Google não encontrou um caminho');
+    return list.map(r => {
+      const out = build(r);
+      out.dep = when; out.sku = sku; out.drive = drive;
+      out.desc = r.description ? String(r.description).slice(0, 60) : '';
+      /* distância, desde a partida, em que fica cada parada */
+      let acc = 0;
+      out.legEnds = (r.legs || []).slice(0, -1).map(l => (acc += (l.distanceMeters || 0)));
+      return out;
+    });
   }
+  const route = async (a, b, profile, dep, opt) => { const l = await routes(a, b, profile, dep, opt); return l ? l[0] : null; };
 
   /* a pior situação do trânsito em cada trecho da viagem (0 livre, 1 lento, 2 parado, null sem informação) */
   function sampleCats(R, samples){
@@ -221,7 +235,7 @@ const Traf = (() => {
     const R = S.route;
     if(!R || !R.google || !R.drive || S.demo || !mode()) return null;
     if(Math.abs(Math.max(dep, Date.now() + 2 * MIN) - R.dep) < 20 * MIN) return null;
-    const rid = S.routeId, r2 = await route(S.from, S.to, S.routeMode, dep);
+    const rid = S.routeId, r2 = await route(S.from, S.to, S.routeMode, dep, {vias: S.vias || [], anchors: R.anchors || []});
     if(!r2 || rid !== S.routeId) return null;
     if(Math.abs(r2.dist - R.dist) > R.dist * 0.03) return 'replan';
     const ratio = r2.dist / R.dist, cd = r2.cumDist;
@@ -264,7 +278,9 @@ const Traf = (() => {
     if(!R || !R.google || !R.drive || S.demo || !mode()) return null;
     const remain = R.dist - dHere;
     if(remain < 800) return 'same';
-    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now());
+    /* só as paradas e os pontos de passagem que ainda estão à frente */
+    const ahead = (list, dists) => (list || []).filter((p, k) => (dists && dists[k] != null ? dists[k] : Infinity) > dHere + 400);
+    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now(), {vias: ahead(S.vias, S.viaDist), anchors: ahead(R.anchors, (R.anchors || []).map(p => p.d))});
     if(!r2 || rid !== S.routeId) return null;
     if(Math.abs(r2.dist - remain) > Math.max(1500, remain * 0.06)) return 'replan';
     const ratio = r2.dist / remain, tHere = tAtDist(R, dHere), tmp = {cumDist: r2.cumDist, cumDur: r2.cumDur};
@@ -280,5 +296,5 @@ const Traf = (() => {
   const at = i => { const R = S.route; return R && R.google && R.scat ? R.scat[i] : null; };
   const has = () => { const R = S.route; return !!(R && R.google && R.scat && R.scat.some(c => c != null)); };
   const row = () => { const R = S.route; return !!(R && R.google && R.drive); };      /* a faixa de trânsito aparece sempre que a rota de carro é do Google */
-  return {mode, route, retime, live, sampleCats, usage, at, has, row, STOP};
+  return {mode, route, routes, retime, live, sampleCats, usage, at, has, row, STOP};
 })();

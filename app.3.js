@@ -4,7 +4,7 @@ const mqMobile = matchMedia('(max-width: 899px)');
 const isMobile = () => mqMobile.matches;
 
 const MapCtl = (() => {
-  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
+  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], picking = null, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
   const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   /* a rota é sempre uma linha contínua, em cima da estrada. A cor é a força da chuva; quanto menor a chance,
      mais a cor se apaga, até o cinza de "seco" */
@@ -80,6 +80,8 @@ const MapCtl = (() => {
     const before = (layers.find(l => l.type === 'symbol' && /^(label_|place_)/.test(l.id)) || {}).id;
     const round = {'line-cap': 'round', 'line-join': 'round'};
     const width = ['interpolate', ['linear'], ['zoom'], 4, 3.5, 9, 5.5, 13, 7.5];
+    gl.addSource('alts', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
+    gl.addLayer({id: 'alts-line', type: 'line', source: 'alts', layout: round, paint: {'line-color': cssVar('--muted'), 'line-opacity': 0.55, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 4, 9, 6, 13, 8]}}, before);
     gl.addLayer({id: 'trip-casing', type: 'line', source: 'trip', layout: round,
       paint: {'line-color': cssVar('--casing'), 'line-opacity': 0.92, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 6, 9, 9, 13, 12]}}, before);
     gl.addLayer({id: 'trip-line', type: 'line', source: 'trip', layout: round, paint: {'line-color': ['get', 'color'], 'line-width': width}}, before);
@@ -89,6 +91,18 @@ const MapCtl = (() => {
     const ps = S.samples ? parts() : [];
     gl.getSource('trip').setData({type: 'FeatureCollection', features: ps.map(q => ({type: 'Feature', properties: {color: q.color}, geometry: {type: 'LineString', coordinates: q.coords}}))});
     gl.setPaintProperty('trip-casing', 'line-color', cssVar('--casing'));
+    /* as outras rotas possíveis ficam em cinza, por baixo; tocar numa delas a escolhe */
+    const others = (S.alts && !S.demo ? S.alts : []).map((a, i) => ({a, i})).filter(o => o.i !== S.alt);
+    if(gl.getSource('alts')) gl.getSource('alts').setData({type: 'FeatureCollection', features: others.map(o => ({type: 'Feature', properties: {i: o.i}, geometry: {type: 'LineString', coordinates: o.a.route.coords}}))});
+  }
+  function hideMenu(){ const m = $('#mapmenu'); if(m) m.hidden = true; }
+  function showMenu(lngLat, pt){
+    if(S.demo || S.busy || picking) return;
+    const m = $('#mapmenu'), w = el.clientWidth, h = el.clientHeight;
+    m.dataset.lat = lngLat.lat; m.dataset.lon = lngLat.lng;
+    m.hidden = false;
+    m.style.left = Math.max(8, Math.min(w - 206, pt.x - 24)) + 'px';
+    m.style.top = Math.max(8, Math.min(h - 150, pt.y + 10)) + 'px';
   }
   const mkEl = (cls, html = '') => { const d = document.createElement('div'); d.className = 'mk ' + cls; d.innerHTML = html; return d; };
   function markersGL(){
@@ -101,6 +115,8 @@ const MapCtl = (() => {
     }
     mk.a.setLngLat([a.lon, a.lat]).addTo(gl);
     mk.b.setLngLat([b.lon, b.lat]).addTo(gl);
+    viaMk.forEach(m => m.remove());
+    viaMk = (S.demo ? [] : (S.vias || [])).map((p, k) => new maplibregl.Marker({element: mkEl('mk-via', String(k + 1))}).setLngLat([p.lon, p.lat]).addTo(gl));
     hazMk.forEach(m => m.remove());
     let prev = -9, lift = 0;
     hazMk = hazards().map(h => {
@@ -151,10 +167,29 @@ const MapCtl = (() => {
       if(needFit) fitGL();
     });
     gl.on('click', e => {
+      hideMenu();
+      if(picking){ const cb = picking; picking = null; cb({lat: e.lngLat.lat, lon: e.lngLat.lng}); return; }
       if(!S.samples) return;
+      /* toque numa rota alternativa (em cinza), longe da rota atual: passa a usá-la */
+      const box = [[e.point.x - 9, e.point.y - 9], [e.point.x + 9, e.point.y + 9]];
+      let onMain = false, alt = null;
+      try{ onMain = gl.queryRenderedFeatures(box, {layers: ['trip-line']}).length > 0; alt = gl.queryRenderedFeatures(box, {layers: ['alts-line']})[0] || null; }catch(_){ /* camadas ainda não prontas */ }
+      if(!onMain && alt){ useAlt(+alt.properties.i); return; }
       const i = nearest(e.point.x, e.point.y, s => { const p = gl.project([s.lon, s.lat]); return [p.x, p.y]; });
       if(i >= 0) setScrub(i);
     });
+    /* tocar e segurar (ou botão direito) num ponto do mapa: partir dali, parar ali ou chegar ali */
+    gl.on('contextmenu', e => { if(e.originalEvent) e.originalEvent.preventDefault(); showMenu(e.lngLat, e.point); });
+    let lp = null, lp0 = null;
+    gl.on('touchstart', e => {
+      clearTimeout(lp);
+      if(e.points && e.points.length > 1) return;
+      const ll = e.lngLat, pt = e.point; lp0 = pt;
+      lp = setTimeout(() => showMenu(ll, pt), 650);
+    });
+    gl.on('touchmove', e => { if(lp0 && e.point && Math.hypot(e.point.x - lp0.x, e.point.y - lp0.y) > 10) clearTimeout(lp); });
+    ['touchend', 'touchcancel', 'zoomstart'].forEach(t => gl.on(t, () => clearTimeout(lp)));
+    gl.on('movestart', hideMenu);
     gl.on('error', () => { /* falhas de tile não interrompem o app */ });
     /* enquanto a pessoa não mexer no mapa, a rota continua enquadrada quando o tamanho muda */
     ['dragstart', 'zoomstart'].forEach(t => gl.on(t, e => { if(e && e.originalEvent) userMoved = true; }));
@@ -261,6 +296,10 @@ const MapCtl = (() => {
       if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
     },
     meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
+    /* modo de escolha: o próximo toque no mapa devolve o ponto */
+    canPick(){ return kind === 'gl' && glReady; },
+    pick(cb){ picking = cb; hideMenu(); },
+    hideMenu,
     async goLive(){
       if(kind === 'gl') return;
       const old = el; kind = null;
@@ -467,10 +506,33 @@ function readDepart(){
   const [hh, mm] = (els.time.value || '08:00').split(':').map(Number);
   return new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0).getTime();
 }
-function setDeparture(ms){
+/* O horário de saída começa em "agora" e segue o relógio até a pessoa escolher outro. Nunca fica no passado
+   (só o acompanhamento por GPS mexe nele por conta própria, porque ali a viagem já começou). */
+S.nowMode = true;
+function writeWhen(ms){
   const d = new Date(ms);
   els.date.value = isoLocal(ms);
   els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function markNow(){
+  const btn = $('#now-btn');
+  if(btn) btn.setAttribute('aria-pressed', String(!!S.nowMode));
+  els.date.min = isoLocal(Date.now());
+}
+function syncNow(){ writeWhen(Date.now()); markNow(); }
+/* devolve true se precisou trazer o horário para agora */
+function clampWhen(){
+  if(S.demo || Live.on()) return false;
+  if(readDepart() >= Date.now() - 90 * 1000) return false;
+  S.nowMode = true; syncNow();
+  return true;
+}
+function setDeparture(ms){
+  if(!S.demo && !Live.on()){
+    S.nowMode = ms <= Date.now() + 60 * 1000;
+    if(S.nowMode) ms = Date.now();
+  }
+  writeWhen(ms); markNow();
   applyWhen();
 }
 
@@ -489,7 +551,8 @@ function updatePill(){
   if(!S.from || !S.to) return;
   $('#pill-od').innerHTML = `<span>${esc(S.from.label)}</span>${icon('arrow')}<span>${esc(S.to.label)}</span>`;
   const dep = S.departMs || readDepart();
-  $('#pill-when').textContent = `${cap(dayLabel(dep))} às ${hhmm(dep)}, ${MODES[S.mode].label.toLowerCase()}`;
+  const nv = S.demo ? 0 : (S.vias || []).length;
+  $('#pill-when').textContent = `${nv ? `${nv} ${nv === 1 ? 'parada' : 'paradas'}; ` : ''}${nv ? dayLabel(dep) : cap(dayLabel(dep))} às ${hhmm(dep)}${S.nowMode && !S.demo && !Live.on() ? ' (agora)' : ''}, ${MODES[S.mode].label.toLowerCase()}`;
 }
 function setSheet(s){
   S.sheet = s;
@@ -521,8 +584,8 @@ function applyMode(){
 /* ---------- viagens salvas (ficam só neste aparelho) ---------- */
 const Store = (() => { try{ const k = '__tnc'; window.localStorage.setItem(k, '1'); window.localStorage.removeItem(k); return window.localStorage; }catch(_){ return null; } })();
 const SAVED_KEY = 'tempo-no-caminho:viagens';
-const slim = p => ({label: p.label, detail: p.detail || '', lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5)});
-const tripKey = (a, b) => `${a.lat.toFixed(3)},${a.lon.toFixed(3)}>${b.lat.toFixed(3)},${b.lon.toFixed(3)}`;
+const slim = p => Object.assign({label: p.label, detail: p.detail || '', lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5)}, p.here ? {here: true} : {});
+const tripKey = (a, b, v) => [a].concat(v || [], [b]).map(p => `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`).join('>');
 function savedTrips(){
   if(!Store) return [];
   try{ const a = JSON.parse(Store.getItem(SAVED_KEY) || '[]'); return Array.isArray(a) ? a.filter(t => t && t.from && t.to && isFinite(t.from.lat) && isFinite(t.to.lat)) : []; }
@@ -533,21 +596,21 @@ function renderSaved(){
   const list = savedTrips();
   $('#saved').hidden = !Store || S.demo || !list.length;
   $('#saved-list').innerHTML = list.map((t, i) =>
-    `<span class="saved-item"><button type="button" class="saved-go" data-i="${i}"><span>${esc(t.from.label)}</span>${icon('arrow')}<span>${esc(t.to.label)}</span></button>` +
+    `<span class="saved-item"><button type="button" class="saved-go" data-i="${i}"><span>${esc(t.from.label)}</span>${icon('arrow')}<span>${esc(t.to.label)}${t.via && t.via.length ? ` (${t.via.length} ${t.via.length === 1 ? 'parada' : 'paradas'})` : ''}</span></button>` +
     `<button type="button" class="saved-del" data-i="${i}" aria-label="Remover a viagem de ${esc(t.from.label)} a ${esc(t.to.label)}">${icon('close')}</button></span>`).join('');
 }
 function updateSaveBtn(){
   const b = $('#save-trip');
   if(!Store || S.demo || !S.from || !S.to){ b.hidden = true; return; }
-  const on = savedTrips().some(t => tripKey(t.from, t.to) === tripKey(S.from, S.to));
+  const on = savedTrips().some(t => tripKey(t.from, t.to, t.via) === tripKey(S.from, S.to, S.vias));
   b.hidden = false;
   b.setAttribute('aria-pressed', String(on));
   b.querySelector('span').textContent = on ? 'Viagem salva' : 'Salvar esta viagem';
 }
 function toggleSave(){
   if(!Store || !S.from || !S.to) return;
-  const list = savedTrips(), key = tripKey(S.from, S.to), k = list.findIndex(t => tripKey(t.from, t.to) === key);
-  if(k >= 0) list.splice(k, 1); else list.unshift({from: slim(S.from), to: slim(S.to), mode: S.mode, slack: S.slack});
+  const list = savedTrips(), key = tripKey(S.from, S.to, S.vias), k = list.findIndex(t => tripKey(t.from, t.to, t.via) === key);
+  if(k >= 0) list.splice(k, 1); else list.unshift({from: slim(S.from), to: slim(S.to), via: (S.vias || []).map(slim), mode: S.mode, slack: S.slack});
   writeSaved(list); updateSaveBtn(); renderSaved();
 }
 function setMode(mode, slack){
@@ -560,21 +623,165 @@ function openSaved(i){
   if(!t || S.busy) return;
   S.pick.from = t.from; S.pick.to = t.to;
   els.from.value = t.from.label; els.to.value = t.to.label;
+  Vias.set((t.via || []).filter(p => p && isFinite(p.lat) && isFinite(p.lon)));
   setMode(t.mode, t.slack);
   plan();
 }
+
+/* ---------- "minha localização", pelo GPS do aparelho ---------- */
+const HERE_LABEL = 'Minha localização';
+const hereObj = () => ({here: true, label: HERE_LABEL, detail: '', kind: 'pelo GPS deste aparelho'});
+let lastFix = null;
+/* a posição atual; reaproveita uma leitura de até um minuto atrás */
+function locateNow(maxAge = 60 * 1000){
+  return new Promise((res, rej) => {
+    if(!('geolocation' in navigator)) return rej(new AppError('Este navegador não informa a localização. Digite o endereço.'));
+    if(lastFix && Date.now() - lastFix.at < maxAge) return res(lastFix);
+    navigator.geolocation.getCurrentPosition(
+      p => { lastFix = {lat: p.coords.latitude, lon: p.coords.longitude, at: Date.now()}; res(lastFix); },
+      e => rej(new AppError(e && e.code === 1
+        ? (location.protocol === 'https:' ? 'O app não tem permissão para ver a localização. Libere a localização para este site nas configurações do navegador, ou digite o endereço.'
+          : 'A localização não funciona com o app aberto como arquivo. Abra pelo endereço https do site ou pelo app instalado, ou digite o endereço.')
+        : 'Não consegui obter a sua localização agora. Tente de novo ou digite o endereço.')),
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: maxAge});
+  });
+}
+/* marca a partida ou a chegada como "minha localização" e já pede a posição, para a consulta sair mais rápida */
+function setHere(which, quiet){
+  S.pick[which] = hereObj();
+  els[which].value = HERE_LABEL;
+  locateNow().catch(e => { if(!quiet) showError(e); });
+}
+
+/* ---------- paradas no caminho ----------
+   Cada parada é uma linha do formulário, com as mesmas sugestões de lugar. A partida, as paradas e a chegada formam
+   uma lista só: arrastar uma parada muda a ordem, e o conteúdo dos campos acompanha. */
+const Vias = (() => {
+  const MAX = 8;
+  let rows = [], seq = 0;
+  const text = p => p.detail ? `${p.label}, ${p.detail}` : p.label;
+  const changed = () => { if(S.route && !S.demo && !S.busy && els.from.value.trim() && els.to.value.trim()) plan({keep: true}); };
+  function relabel(){
+    rows.forEach((r, k) => { r.el.querySelector('label').textContent = `Parada ${k + 1}`; });
+    $('#via-add').hidden = rows.length >= MAX || !!S.demo;
+  }
+  function wire(row){
+    let items = [], timer = null, ctl = null, my = 0;
+    const close = () => { row.list.hidden = true; row.input.setAttribute('aria-expanded', 'false'); };
+    const render = () => {
+      row.list.innerHTML = items.map((p, i) => `<li role="option" data-i="${i}"><span class="o-main">${esc(p.label)}</span>${(p.kind || p.detail) ? `<span class="o-sub">${esc([p.kind, p.detail].filter(Boolean).join(' · '))}</span>` : ''}</li>`).join('');
+      row.list.hidden = !items.length; row.input.setAttribute('aria-expanded', String(!!items.length));
+    };
+    const choose = p => { row.pick = p; row.input.value = text(p); items = []; close(); changed(); };
+    row.input.addEventListener('input', () => {
+      row.pick = null; clearTimeout(timer); if(ctl) ctl.abort();
+      const q = row.input.value.trim();
+      if(q.length < 3){ items = []; render(); return; }
+      const me = ++my;
+      timer = setTimeout(async () => {
+        ctl = new AbortController();
+        try{ const res = await searchPlaces(q, ctl.signal); if(me !== my || document.activeElement !== row.input) return; items = res; render(); }
+        catch(_){ /* a busca é tentada de novo ao enviar */ }
+      }, 320);
+    });
+    row.input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); if(!row.list.hidden && items.length) choose(items[0]); else plan(); }
+      else if(e.key === 'Escape') close();
+    });
+    row.list.addEventListener('pointerdown', e => { const li = e.target.closest('li'); if(!li) return; e.preventDefault(); choose(items[+li.dataset.i]); });
+    row.input.addEventListener('blur', () => setTimeout(close, 160));
+    row.el.querySelector('.via-del').addEventListener('click', () => { const had = !!(row.pick || row.input.value.trim()); remove(row); if(had) changed(); });
+    /* arrastar pelo ícone de três traços */
+    const h = row.el.querySelector('.grab');
+    h.addEventListener('pointerdown', e => {
+      if(S.busy || S.demo) return;
+      e.preventDefault();
+      try{ h.setPointerCapture(e.pointerId); }catch(_){ /* sem captura: segue pelos eventos do documento */ }
+      const slots = [els.from.closest('.field')].concat(rows.map(r => r.el), [els.to.closest('.field')]);
+      const mids = slots.map(x => { const b = x.getBoundingClientRect(); return b.top + b.height / 2; });
+      const from = slots.indexOf(row.el), y0 = e.clientY;
+      let to = from;
+      row.el.classList.add('dragging');
+      const mark = () => { slots.forEach(x => x.classList.remove('drop-before', 'drop-after')); if(to !== from) slots[to].classList.add(to < from ? 'drop-before' : 'drop-after'); };
+      const move = ev => {
+        const dy = ev.clientY - y0, y = mids[from] + dy;
+        row.el.style.transform = `translateY(${dy}px)`;
+        to = mids.filter((m, k) => k !== from && m < y).length;        /* quantos ficam acima: é a nova posição */
+        mark();
+      };
+      const end = () => {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', end); h.removeEventListener('pointercancel', end);
+        row.el.classList.remove('dragging'); row.el.style.transform = '';
+        slots.forEach(x => x.classList.remove('drop-before', 'drop-after'));
+        if(to !== from) reorder(from, to);
+      };
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
+    });
+  }
+  function reorder(a, b){
+    const C = [{pick: S.pick.from, text: els.from.value}].concat(rows.map(r => ({pick: r.pick, text: r.input.value})), [{pick: S.pick.to, text: els.to.value}]);
+    C.splice(b, 0, C.splice(a, 1)[0]);
+    S.pick.from = C[0].pick; els.from.value = C[0].text;
+    rows.forEach((r, k) => { r.pick = C[k + 1].pick; r.input.value = C[k + 1].text; });
+    S.pick.to = C[C.length - 1].pick; els.to.value = C[C.length - 1].text;
+    changed();
+  }
+  function add(place, focus){
+    if(rows.length >= MAX) return null;
+    const id = 'via' + (++seq), el = document.createElement('div');
+    el.className = 'field via-row';
+    el.innerHTML = `<label for="${id}"></label><div class="inwrap">` +
+      `<button type="button" class="inbtn grab" aria-label="Arrastar para mudar a ordem" title="Arrastar para mudar a ordem">${icon('grab')}</button>` +
+      `<input id="${id}" class="input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Cidade, endereço ou lugar" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list">` +
+      `<button type="button" class="inbtn via-del" aria-label="Remover esta parada" title="Remover esta parada">${icon('close')}</button></div>` +
+      `<ul id="${id}-list" class="options" role="listbox" aria-label="Sugestões para a parada" hidden></ul>`;
+    $('#vias').appendChild(el);
+    const row = {el, input: el.querySelector('input'), list: el.querySelector('ul'), pick: place || null};
+    if(place) row.input.value = text(place);
+    rows.push(row); wire(row); relabel();
+    if(focus) row.input.focus();
+    return row;
+  }
+  function remove(row){ rows = rows.filter(r => r !== row); row.el.remove(); relabel(); }
+  function set(places){ rows.forEach(r => r.el.remove()); rows = []; (places || []).slice(0, MAX).forEach(p => add(p)); relabel(); }
+  /* devolve as paradas preenchidas, na ordem, já com coordenadas; campos vazios são ignorados */
+  async function resolve(){
+    const out = [];
+    for(const r of rows){
+      const q = r.input.value.trim();
+      if(r.pick && r.pick.here){ const f = await locateNow(); r.pick = Object.assign(hereObj(), {lat: f.lat, lon: f.lon, at: f.at}); out.push(r.pick); continue; }
+      if(r.pick){ out.push(r.pick); continue; }
+      if(!q) continue;
+      let res;
+      try{ res = await searchPlaces(q); }catch(_){ throw new AppError('A busca de lugares não respondeu. Tente de novo em instantes.'); }
+      if(!res.length) throw new AppError(`Não encontrei a parada “${q}”. Tente incluir a cidade e o estado.`);
+      r.pick = res[0]; r.input.value = text(res[0]); out.push(res[0]);
+    }
+    return out;
+  }
+  function reverse(){ const C = rows.map(r => ({pick: r.pick, text: r.input.value})).reverse(); rows.forEach((r, k) => { r.pick = C[k].pick; r.input.value = C[k].text; }); }
+  function lock(on){ rows.forEach(r => { r.input.disabled = on; }); relabel(); }
+  /* dá nome a um ponto marcado no mapa, quando o serviço de lugares responde */
+  function rename(place, label){ const r = rows.find(x => x.pick === place); if(r){ place.label = label; r.input.value = label; } }
+  return {add, set, resolve, reverse, lock, relabel, rename, MAX};
+})();
 
 function combo(which){
   const input = els[which], list = $(`#${which}-list`);
   let items = [], active = -1, ctl = null, timer = null, seq = 0;
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
   const render = () => {
-    list.innerHTML = items.map((p, i) => `<li role="option" id="${which}-opt-${i}" data-i="${i}" aria-selected="${i === active}"><span class="o-main">${esc(p.label)}</span>${(p.kind || p.detail) ? `<span class="o-sub">${esc([p.kind ? cap(p.kind) : '', p.detail].filter(Boolean).join(', '))}</span>` : ''}</li>`).join('');
+    list.innerHTML = items.map((p, i) => `<li role="option" id="${which}-opt-${i}" data-i="${i}" aria-selected="${i === active}"${p.here ? ' class="o-here"' : ''}><span class="o-main">${esc(p.label)}</span>${(p.kind || p.detail) ? `<span class="o-sub">${esc([p.kind ? cap(p.kind) : '', p.detail].filter(Boolean).join(', '))}</span>` : ''}</li>`).join('');
     list.hidden = !items.length;
     input.setAttribute('aria-expanded', String(!!items.length));
     if(active >= 0) input.setAttribute('aria-activedescendant', `${which}-opt-${active}`); else input.removeAttribute('aria-activedescendant');
   };
+  /* a primeira sugestão, com o campo vazio, é a própria localização */
+  const offerHere = () => { if(S.demo) return; const o = S.pick[which === 'from' ? 'to' : 'from']; items = (o && o.here || !('geolocation' in navigator) ? [] : [hereObj()]).concat(MapCtl.canPick() ? [{mapPick: true, label: 'Escolher no mapa', detail: '', kind: 'toque no ponto desejado'}] : []); active = -1; render(); };
+  input.addEventListener('focus', () => { if(input.value.trim().length < 3 || input.value.trim() === HERE_LABEL) offerHere(); });
   const pick = p => {
+    if(p.mapPick){ items = []; close(); input.blur(); startPick(which); return; }
+    if(p.here){ items = []; close(); setHere(which); if(which === 'from' && !els.to.value.trim()) els.to.focus(); return; }
     S.pick[which] = p;
     input.value = p.detail ? `${p.label}, ${p.detail}` : p.label;
     items = []; close();
@@ -584,7 +791,8 @@ function combo(which){
     S.pick[which] = null;
     clearTimeout(timer); if(ctl) ctl.abort();
     const q = input.value.trim();
-    if(q.length < 3 || S.demo){ items = []; render(); return; }
+    if(q.length < 3 || S.demo){ if(q.length < 3) offerHere(); else { items = []; render(); } return; }
+    if(items.length && (items[0].here || items[0].mapPick)){ items = []; render(); }      /* começou a digitar um endereço: a sugestão da localização sai */
     const my = ++seq;
     timer = setTimeout(async () => {
       ctl = new AbortController();
@@ -616,6 +824,15 @@ function combo(which){
 }
 
 async function resolvePlace(which){
+  const typed = els[which].value.trim();
+  if(!S.pick[which] && /^(minha localiza[çc][ãa]o|aqui|onde estou)$/i.test(typed)) S.pick[which] = hereObj();
+  if(S.pick[which] && S.pick[which].here){
+    const other = S.pick[which === 'from' ? 'to' : 'from'];
+    if(which === 'to' && other && other.here) throw new AppError('A partida e a chegada não podem ser, as duas, a sua localização.');
+    const fix = await locateNow();
+    els[which].value = HERE_LABEL;
+    return (S.pick[which] = Object.assign(hereObj(), {lat: fix.lat, lon: fix.lon, at: fix.at}));
+  }
   if(S.pick[which]) return S.pick[which];
   const input = els[which], q = input.value.trim();
   if(!q) throw new AppError(which === 'from' ? 'Diga de onde você sai.' : 'Diga para onde você vai.');
@@ -680,8 +897,9 @@ function showResult(){
 /* O trajeto fica no endereço da página (depois do #). Salvar nos favoritos guarda a viagem. */
 function writeHash(){
   try{
-    const enc = p => `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.label}`;
+    const enc = p => p.here ? 'aqui' : `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.label}`;
     const q = new URLSearchParams({de: enc(S.from), para: enc(S.to), modo: S.mode, folga: String(S.slack)});
+    (S.vias || []).forEach(p => q.append('via', enc(p)));
     history.replaceState(null, '', '#' + q.toString());
   }catch(_){ /* sem acesso ao histórico: segue sem favorito */ }
 }
@@ -691,6 +909,7 @@ function readHash(){
     if(!h) return false;
     const q = new URLSearchParams(h);
     const dec = v => {
+      if(v === 'aqui') return hereObj();
       const m = (v || '').match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(.*)$/);
       if(!m || Math.abs(+m[1]) > 90 || Math.abs(+m[2]) > 180) return null;
       return {lat: +m[1], lon: +m[2], label: m[3].slice(0, 80) || 'Ponto no mapa', detail: ''};
@@ -699,6 +918,7 @@ function readHash(){
     if(!a || !b) return false;
     S.pick.from = a; S.pick.to = b;
     els.from.value = a.label; els.to.value = b.label;
+    Vias.set(q.getAll('via').map(dec).filter(p => p && !p.here));
     setMode(q.get('modo'), q.get('folga'));
     return true;
   }catch(_){ return false; }
@@ -717,39 +937,124 @@ async function plan(opts = {}){
   if(Live.on() && !opts.live) Live.stop();
   hideError();
   if(S.demo){ applyWhen(); showResult(); return; }
+  if(!opts.live){ if(S.nowMode) syncNow(); else clampWhen(); }       /* "agora" é o momento da consulta, não o de quando a página abriu */
   let ok = false;
   setBusy(true, 'Procurando os lugares…');
   try{
-    const from = await resolvePlace('from'), to = await resolvePlace('to');
-    if(hav([from.lon, from.lat], [to.lon, to.lat]) < 200) throw new AppError('A partida e a chegada são praticamente o mesmo lugar.');
+    const from = await resolvePlace('from'), to = await resolvePlace('to'), vias = await Vias.resolve();
+    if(!vias.length && hav([from.lon, from.lat], [to.lon, to.lat]) < 200) throw new AppError('A partida e a chegada são praticamente o mesmo lugar.');
     setBusy(true, 'Traçando a rota…');
     const profile = MODES[S.mode].profile;
-    let route = null, gErr = '';
+    let list = null, gErr = '';
     if(Traf.mode()){
-      try{ route = await Traf.route(from, to, profile, readDepart()); }
+      try{ list = await Traf.routes(from, to, profile, readDepart(), {vias, alts: true}); }
       catch(e){ gErr = (e && e.message) || 'sem resposta'; }
     }
-    if(!route){ route = await fetchRoute(from, to, profile); if(gErr) route.gErr = gErr; }
-    const samples = sampleRoute(route);
-    if(route.google) route.scat = Traf.sampleCats(route, samples);
-    setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
-    const dep = readDepart();
-    const wx = await loadWeather(samples, dep, route.dur);
-    Object.assign(S, {from, to, route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000, routeMode: profile});
-    S.extra = {relief: null, road: false};
-    const id = ++S.routeId;
-    recompute({focusWorst: true});
-    MapCtl.setTrip();
-    if(!opts.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
-    if(opts.live) Live.rebase();
+    if(!list){ list = await fetchRoute(from, to, profile, vias, true); if(gErr) list[0].gErr = gErr; }
+    list.forEach(r => { if(!r.desc) r.desc = routeDesc(r); });
+    const alts = list.map(r => ({route: r, id: 0, bundle: null, stat: null}));
+    const i0 = opts.preferDist ? list.reduce((b, r, k) => Math.abs(r.dist - opts.preferDist) < Math.abs(list[b].dist - opts.preferDist) ? k : b, 0) : 0;
+    await adopt(alts, i0, {from, to, vias, profile, keep: opts.keep, live: opts.live});
     writeHash();
-    namePlaces(id);
-    loadExtras(id);
-    Conf.record(S.trip);
-    googRefresh();
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
+}
+
+/* um número novo para cada rota mostrada: as respostas que chegam atrasadas, de outra rota, são descartadas por ele */
+function newRouteId(){ S.routeSeq = Math.max(S.routeSeq || 0, S.routeId || 0) + 1; return (S.routeId = S.routeSeq); }
+
+/* carrega a previsão para uma das rotas possíveis e passa a mostrá-la. Só troca o que está na tela se tudo der certo. */
+async function adopt(alts, i, ctx){
+  const alt = alts[i], route = alt.route;
+  const samples = sampleRoute(route);
+  if(route.google) route.scat = Traf.sampleCats(route, samples);
+  setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
+  const dep = readDepart();
+  const wx = await loadWeather(samples, dep, route.dur);
+  Object.assign(S, {from: ctx.from, to: ctx.to, vias: ctx.vias || [], routeMode: ctx.profile, alts, alt: i,
+    route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000});
+  S.extra = {relief: null, road: false};
+  /* onde fica cada parada ao longo do caminho; e, numa rota que não é a recomendada, dois pontos de passagem
+     que mantêm o Google nela quando o trânsito é refeito */
+  S.viaDist = (route.legEnds || []).slice(0, S.vias.length);
+  route.anchors = i > 0 && !S.vias.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
+  const id = alt.id = newRouteId();
+  recompute({focusWorst: true});
+  MapCtl.setTrip();
+  if(!ctx.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
+  if(ctx.live) Live.rebase();
+  namePlaces(id);
+  loadExtras(id);
+  Conf.record(S.trip);
+  googRefresh();
+}
+
+/* troca para outra das rotas possíveis. A previsão de cada uma é buscada só na primeira vez. */
+async function useAlt(i){
+  if(S.busy || S.demo || !S.alts || !S.alts[i] || i === S.alt) return;
+  if(Live.on()) Live.stop();
+  hideError();
+  const cur = S.alts[S.alt];
+  if(cur) cur.bundle = {samples: S.samples, wx: S.wx, wxAt: S.wxAt, wxDay: S.wxDay, places: S.places, extra: S.extra, goog: S.goog, urban: S.urban};
+  const alt = S.alts[i];
+  if(alt.stale){ plan({keep: true, preferDist: alt.route.dist}); return; }      /* mudou o horário: refaz as rotas e fica na mais parecida com esta */
+  if(alt.bundle){
+    const b = alt.bundle;
+    Object.assign(S, {route: alt.route, samples: b.samples, wx: b.wx, wxAt: b.wxAt, wxDay: b.wxDay, places: b.places, extra: b.extra, goog: b.goog, urban: b.urban, alt: i});
+    S.routeId = alt.id; S.viaDist = [];
+    if(wxOk()) recompute({focusWorst: true}); else applyWhen();
+    MapCtl.setTrip();
+    googRefresh();
+    return;
+  }
+  let ok = false;
+  setBusy(true, 'Buscando a previsão desta rota…');
+  try{ await adopt(S.alts, i, {from: S.from, to: S.to, vias: S.vias, profile: S.routeMode, keep: true}); ok = true; }
+  catch(e){ showError(e); }
+  finally{ setBusy(false); settle(ok); }
+}
+
+/* os cartões das rotas possíveis, no alto do resumo */
+function renderAlts(){
+  const box = $('#alts');
+  if(!box) return;
+  if(S.demo || !S.alts || S.alts.length < 2 || !S.trip){ box.hidden = true; box.innerHTML = ''; return; }
+  const k = 1 + S.slack, best = Math.min(...S.alts.filter(a => !a.stale).map(a => a.route.dur));
+  if(S.alts[S.alt] && S.pAnyNow != null) S.alts[S.alt].stat = S.pAnyNow;
+  box.hidden = false;
+  box.innerHTML = S.alts.map((a, i) => `<button type="button" class="alt" data-i="${i}" aria-pressed="${i === S.alt}">` + (a.stale
+    ? `<b>Outro caminho</b><span>${esc(kmText(a.route.dist))}${a.route.desc ? ', ' + esc(a.route.desc) : ''}</span><span>toque para refazer com o novo horário</span></button>`
+    : `<b>${durText(a.route.dur * k)}</b><span>${esc(kmText(a.route.dist))}${a.route.desc ? ', ' + esc(a.route.desc) : ''}</span>` +
+      `<span>${a.route.dur === best ? 'a mais rápida' : `${minText((a.route.dur - best) * k / 60)} a mais`}${a.stat != null ? `; chuva no caminho: ${pct(a.stat)}` : '; toque para ver a previsão'}</span></button>`)).join('');
+}
+
+/* ---------- pontos marcados no mapa ---------- */
+async function pickPoint(which, lat, lon){
+  if(S.demo || S.busy) return;
+  hideError();
+  const place = {label: 'Ponto no mapa', detail: '', lat, lon};
+  if(which === 'via'){ if(!Vias.add(place)){ showError(new AppError(`O app aceita até ${Vias.MAX} paradas.`)); return; } }
+  else { S.pick[which] = place; els[which].value = place.label; }
+  /* tenta dar um nome ao ponto; se o serviço de lugares não responder, fica "Ponto no mapa" */
+  reversePlace(lat, lon).then(n => {
+    const name = n && (n.street && n.city ? `${n.street}, ${n.city}` : (n.city || n.district || n.county));
+    if(!name) return;
+    const label = 'Perto de ' + name;
+    if(which === 'via') Vias.rename(place, label);
+    else if(S.pick[which] === place){ place.label = label; els[which].value = label; }
+    if(S.from === place || S.to === place || (S.vias || []).includes(place)){ updatePill(); if(S.trip) renderVerdict(); }
+  }).catch(() => {});
+  if(els.from.value.trim() && els.to.value.trim()) plan({keep: !!S.route});
+  else { els.plan.classList.remove('is-min'); (els.from.value.trim() ? els.to : els.from).focus(); }
+}
+function endPick(){ document.body.classList.remove('picking'); $('#pickbar').hidden = true; MapCtl.pick(null); requestAnimationFrame(syncChrome); }
+function startPick(which){
+  if(!MapCtl.canPick()) return;
+  $('#pickbar-text').textContent = which === 'from' ? 'Toque no mapa para marcar a partida' : 'Toque no mapa para marcar a chegada';
+  $('#pickbar').hidden = false;
+  document.body.classList.add('picking');
+  MapCtl.pick(p => { endPick(); pickPoint(which, p.lat, p.lon); });
 }
 
 /* o horário de saída mudou e a rota é do Google: refaz o tempo de viagem com o trânsito daquela hora.
@@ -759,6 +1064,8 @@ async function retimeGoogle(dep){
   try{
     const r = await Traf.retime(dep);
     S.route.gErr2 = '';
+    /* o tempo das outras rotas possíveis era o do horário antigo: ficam marcadas para refazer */
+    if(r === 'same' && S.alts) S.alts.forEach((a, j) => { if(j !== S.alt){ a.stale = true; a.bundle = null; a.stat = null; } });
     if(r === 'replan'){ plan({keep: true}); return true; }
   }catch(e){ S.route.gErr2 = (e && e.message) || 'sem resposta'; }
   window.dispatchEvent(new Event('tnc-goog'));
@@ -827,6 +1134,7 @@ function enterDemo(){
   $('#banner').hidden = false;
   els.from.value = Demo.from.label; els.to.value = Demo.to.label;
   [els.from, els.to, els.locate, els.swap].forEach(x => { x.disabled = true; });
+  Vias.set([]); Vias.lock(true); $('#map-hint').hidden = true;
   $$('input[name="mode"]').forEach(r => { if(r.value === 'bike' || r.value === 'foot') r.disabled = true; });
   const d = new Date(Date.now() + DAY); d.setHours(12, 30, 0, 0);
   els.date.value = isoLocal(d.getTime()); els.time.value = '12:30';
@@ -867,12 +1175,9 @@ async function probe(){
 }
 
 function initWhen(){
-  const now = Date.now(), d = new Date(now + 20 * MIN);
-  d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0);
-  els.date.value = isoLocal(d.getTime());
-  els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  els.date.min = isoLocal(now);
-  els.date.max = isoLocal(now + 14 * DAY);
+  S.nowMode = true;
+  syncNow();
+  els.date.max = isoLocal(Date.now() + 14 * DAY);
 }
 
 function initUI(){
@@ -886,8 +1191,22 @@ function initUI(){
   renderSaved();
 
   els.go.addEventListener('click', plan);
-  els.date.addEventListener('change', applyWhen);
-  els.time.addEventListener('change', applyWhen);
+  /* mexer no dia ou na hora sai do "agora"; um horário que já passou volta para agora */
+  const whenEdited = () => {
+    if(!S.demo && !Live.on()){
+      S.nowMode = false;
+      if(clampWhen()) els.status.textContent = 'O horário de saída não pode ficar no passado: usei o horário de agora.';
+      markNow();
+    }
+    applyWhen();
+  };
+  els.date.addEventListener('change', whenEdited);
+  els.time.addEventListener('change', whenEdited);
+  $('#now-btn').addEventListener('click', () => {
+    if(S.demo) return;
+    S.nowMode = true; syncNow();
+    if(S.route) applyWhen();
+  });
 
   $$('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
     const prev = MODES[S.mode].profile;
@@ -900,21 +1219,10 @@ function initUI(){
   els.swap.addEventListener('click', () => {
     const v = els.from.value; els.from.value = els.to.value; els.to.value = v;
     const p = S.pick.from; S.pick.from = S.pick.to; S.pick.to = p;
+    Vias.reverse();
     if(S.route && !S.demo && els.from.value.trim() && els.to.value.trim()) plan();
   });
-  els.locate.addEventListener('click', () => {
-    hideError();
-    if(!navigator.geolocation){ showError(new AppError('Este navegador não informa a localização.')); return; }
-    els.locate.disabled = true;
-    navigator.geolocation.getCurrentPosition(pos => {
-      els.locate.disabled = false;
-      S.pick.from = {label: 'Minha localização', detail: '', lat: pos.coords.latitude, lon: pos.coords.longitude};
-      els.from.value = 'Minha localização';
-    }, () => {
-      els.locate.disabled = false;
-      showError(new AppError('Não consegui obter a sua localização. Digite o ponto de partida.'));
-    }, {enableHighAccuracy: false, timeout: 10000, maximumAge: 300000});
-  });
+  els.locate.addEventListener('click', () => { hideError(); setHere('from'); if(!els.to.value.trim()) els.to.focus(); });
 
   /* barra de viagem e painel (celular) */
   $('#pill').addEventListener('click', () => { els.plan.classList.remove('is-min'); $('#plan-close').hidden = !S.route; });
@@ -957,6 +1265,10 @@ function initUI(){
   });
   $('#models').addEventListener('toggle', renderModels);
   $('#live-btn').addEventListener('click', () => Live.toggle());
+  $('#via-add').addEventListener('click', () => Vias.add(null, true));
+  $('#alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) useAlt(+b.dataset.i); });
+  $('#mapmenu').addEventListener('click', e => { const b = e.target.closest('button[data-act]'), m = $('#mapmenu'); if(!b) return; m.hidden = true; pickPoint(b.dataset.act, +m.dataset.lat, +m.dataset.lon); });
+  $('#pick-cancel').addEventListener('click', endPick);
   $('#swap-btn').addEventListener('click', () => els.swap.click());
   $('#dtabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if(b) setTab(b.dataset.tab); });
   setTab('resumo');
@@ -1136,6 +1448,12 @@ async function boot(){
   if(live){
     S.live = true; MapCtl.init(true);
     if(!S.route && !S.busy && readHash()) plan();        /* abriu por um favorito: já mostra a viagem */
+    else if(!S.route && !S.busy && !els.from.value.trim() && location.protocol === 'https:' && 'geolocation' in navigator){
+      /* como nos apps de mapa, a partida começa como a sua localização; a posição só é pedida ao consultar,
+         a menos que a permissão já tenha sido dada antes */
+      S.pick.from = hereObj(); els.from.value = HERE_LABEL;
+      try{ navigator.permissions.query({name: 'geolocation'}).then(st => { if(st.state === 'granted') locateNow().catch(() => {}); }).catch(() => {}); }catch(_){ /* sem a consulta de permissões */ }
+    }
   }
   else if(!S.route && !S.busy) enterDemo();
 }
@@ -1192,7 +1510,8 @@ const Live = (() => {
     btn.hidden = !S.trip || !!S.demo;
     $('#swap-btn').hidden = !S.trip || !!S.demo;
     btn.setAttribute('aria-pressed', String(on()));
-    btn.querySelector('span').textContent = on() ? 'Parar o acompanhamento' : 'Acompanhar a viagem';
+    btn.querySelector('b').textContent = on() ? 'Parar o acompanhamento' : 'Iniciar acompanhamento';
+    btn.querySelector('small').textContent = on() ? 'O app está usando o GPS e mantém a tela ligada' : 'Ao vivo, pelo GPS: onde você está e o que vem pela frente';
     if(!on() && !msg){ box.hidden = true; return; }
     box.hidden = false;
     if(!on()){ box.innerHTML = `<p class="live-warn">${esc(msg)}</p>`; return; }
@@ -1229,6 +1548,7 @@ const Live = (() => {
     if(!S.route || !S.trip || !on()) return;
     const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now();
     last = {lon, lat, acc: pos.coords.accuracy, sp, at: now}; msg = '';
+    lastFix = {lat, lon, at: now};
     MapCtl.me(lon, lat);
     /* o trecho em que estou passa a ser "agora": desloca o horário de saída, no máximo uma vez por minuto */
     const depEff = now - sp.t * 1000 * (1 + S.slack);
@@ -1255,8 +1575,11 @@ const Live = (() => {
   async function replanFromHere(){
     if(!last || S.busy) return;
     replans++;
-    S.pick.from = {label: 'Minha localização', detail: '', lat: last.lat, lon: last.lon};
-    els.from.value = 'Minha localização';
+    lastFix = {lat: last.lat, lon: last.lon, at: Date.now()};
+    /* seguem só as paradas que ainda estão à frente */
+    Vias.set((S.vias || []).filter((p, k) => (S.viaDist && S.viaDist[k] != null ? S.viaDist[k] : Infinity) > last.sp.d + 400));
+    S.pick.from = Object.assign(hereObj(), lastFix);
+    els.from.value = HERE_LABEL;
     const d = new Date();
     els.date.value = isoLocal(d.getTime()); els.time.value = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     note = `Rota refeita a partir da sua posição às ${hhmm(Date.now())}.`;

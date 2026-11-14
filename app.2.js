@@ -84,6 +84,7 @@ function buildVerdict(trip){
   /* as chances da viagem inteira */
   if(et){
     chips.push({v: pct(et.pAny), l: 'de chance de chuva no caminho'});
+    S.pAnyNow = et.pAny;
     chips.push({v: pct(et.pMod), l: 'de chance de moderada ou forte'});
     if(et.minQ90 >= 1) chips.push({v: `${Math.round(et.minMean)} min`, l: `de chuva em média (de ${Math.round(et.minQ10)} a ${Math.round(et.minQ90)})`});
     if(et.pHeavy >= 0.05) notes.push({ic: 'rain-heavy', sign: true, html: `Em ${pct(et.pHeavy)} das previsões, a chuva chega a forte em algum ponto do caminho.`});
@@ -243,7 +244,8 @@ function factsText(trip){
     : S.slack ? `, já com ${Math.round(S.slack * 100)}% de folga` : ', sem contar trânsito';
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
-  const src = S.demo ? '' : ` Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const stops = !S.demo && S.vias && S.vias.length ? ` ${S.vias.length === 1 ? 'Parada' : 'Paradas'}: ${S.vias.map(v => v.label).join(', ')}.` : '';
+  const src = S.demo ? '' : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -792,7 +794,7 @@ function renderAll(){
   ['#verdict', '#ruler', '#depart', '#list'].forEach(s => { $(s).hidden = false; });
   $('#empty').hidden = true;
   $('#layout').classList.add('has-trip');
-  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render();
+  renderSources(); renderLayers(); renderVerdict(); renderLegend(); renderReadout(); renderRuler(); renderModels(); renderDepart(); renderList(); Conf.render(); Live.render(); renderAlts();
   MapCtl.paint();
   updatePill();
 }

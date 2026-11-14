@@ -1,12 +1,12 @@
 {
   "name": "tempo-no-caminho",
-  "version": "3.7.0",
+  "version": "3.9.0",
   "private": true,
   "description": "Previsão do tempo ao longo de um trajeto: chuva, pista, serra e trânsito em cada trecho, na hora em que você passa por ele.",
   "license": "MIT",
   "scripts": {
     "build": "python3 build.py",
-    "test": "node test/v1.js && node test/v4.js && node test/v6.js && node test/v10.js && node test/v12.js && node test/v13.js && node test/v14.js && node test/v15.js"
+    "test": "node test/v1.js && node test/v4.js && node test/v6.js && node test/v10.js && node test/v12.js && node test/v13.js && node test/v14.js && node test/v15.js && node test/v16.js && node test/v17.js && node test/v18.js"
   },
   "devDependencies": {
     "maplibre-gl": "^5.24.0",
