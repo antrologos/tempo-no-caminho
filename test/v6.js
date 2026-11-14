@@ -25,6 +25,9 @@ const snap = p => p.evaluate(() => { const { S, Calib, Goog } = window.__tempoNo
     const gq = o.log.requests.filter(u => /weather\.googleapis/.test(u));
     console.log('pedidos ao Google:', gq.length, '| exemplo:', gq[gq.length - 1].replace(/key=[^&]+/, 'key=…').slice(0, 200));
     await o.page.evaluate(() => { document.querySelector('#drawer').hidden = false; }); await o.page.locator('#gsrc').scrollIntoViewIfNeeded(); await o.page.screenshot({ path: 'shots/v32-gsrc.png' });
+    /* desde a versão 4.2, com a previsão toda do Google, o teste dos modelos fica escondido; ele volta quando a chance mostrada é a dos modelos */
+    console.log('teste dos modelos escondido com a previsão só do Google:', await o.page.evaluate(() => getComputedStyle(document.querySelector('#conf-retro')).display === 'none'));
+    await o.page.selectOption('#pref-prim', 'app'); await o.page.waitForTimeout(5000);
     await o.page.evaluate(() => { document.querySelector('#drawer').hidden = true; }); await o.page.locator('#sheetbar button[data-sheet=full]').click(); await o.page.waitForTimeout(400); await o.page.locator('#conf-retro').scrollIntoViewIfNeeded(); await o.page.locator('#conf-retro').click();
     await o.page.waitForFunction(() => !document.querySelector('#conf-retro').disabled, null, { timeout: 60000 }); await o.page.waitForTimeout(500);
     console.log('TESTE:', await o.page.evaluate(() => document.querySelector('#conf-status').textContent + ' || ' + document.querySelector('#conf-out').innerText.replace(/\n+/g, ' | ').slice(0, 1250)));

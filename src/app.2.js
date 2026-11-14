@@ -259,7 +259,7 @@ function factsText(trip){
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
   const stops = S.demo ? '' : viaText(S.vias);
-  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Google.` : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google Maps' : 'OpenStreetMap'}. Previsão: inclui dados meteorológicos do Google.` : `${stops} Rota: ${r.google ? 'Google Maps' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? '; inclui dados meteorológicos do Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -270,7 +270,9 @@ const isAll = () => S.source === 'consenso';
 const modelP = p => (p.per[S.source] ? p.per[S.source].p : null);
 /* para o mapa, a lista e a leitura: força da chuva se chover + classe de chance */
 /* o resultado principal (mapa, lista, leitura e gráfico) vem sempre das simulações */
-const srcVal = p => p.klass ? p.amt : ((p.n || p.ens) ? 0 : null);
+/* força da chuva mostrada no trecho: o volume, se há chance; zero (seco), se há previsão e a chance é baixa; nulo só quando
+   nenhuma fonte cobre o trecho. Com a previsão toda do Google não há modelos, e a chance dele já é a previsão. */
+const srcVal = p => p.klass ? p.amt : ((p.n || p.ens || p.src === 'g') ? 0 : null);
 const srcKlass = p => p.klass;
 /* para o gráfico de baixo: só o que os modelos detalhados dizem (em "Todos", a mediana deles) */
 const barVal = p => isAll() ? p.med : modelP(p);
@@ -337,6 +339,9 @@ function histText(p){
   return h ? `Nos últimos ${h.days} dias, com chance ${h.band}, choveu em ${h.share} dos casos.` : '';
 }
 
+/* visibilidade em metros, dita de forma simples; 0 quer dizer "abaixo do que a fonte consegue informar" */
+const visText = v => v < 100 ? 'menos de 1 km' : v < 1000 ? `${nf(Math.round(v / 100) * 100)} m` : `${nf(v / 1000, (v < 3000 && Math.round(v / 100) % 10) ? 1 : 0)} km`;
+
 function renderReadout(){
   const i = S.scrub, p = S.trip.pts[i], s = S.samples[i], last = S.samples.length - 1, all = true;
   const v = srcVal(p), k = srcKlass(p), c = v == null ? -1 : (k ? Math.max(1, catOf(v)) : 0), km = nf(Math.round(p.km));
@@ -374,6 +379,8 @@ function renderReadout(){
   const air = [];
   if(p.temp != null) air.push(`${Math.round(p.temp)} °C`);
   if(p.gust != null) air.push(`rajadas de ${Math.round(p.gust)} km/h`);
+  /* visibilidade prevista, quando baixa (é dela que sai o aviso de neblina com os dados do Google) */
+  if(p.vis != null && p.vis < 5000) air.push('visibilidade de ' + visText(p.vis));
   if(air.length) facts.push(['Ar', air.join(', ')]);
   const road = [], tc = Traf.at(i);
   if(tc != null) road.push(tc === 2 ? 'trânsito congestionado' : tc === 1 ? 'trânsito lento' : 'trânsito livre');
@@ -475,12 +482,13 @@ function renderRuler(){
       const yy = Math.round(baseA - v * hA) + 0.5;
       g += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${L + pw}" y1="${yy}" y2="${yy}"/><text x="${L - 7}" y="${yy + 4}" text-anchor="end">${v * 100}%</text>`;
     });
-    g += legendRow(gMode ? [[r1, 'chance de chuva no trecho']] : [[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
+    g += legendRow(gMode ? [[r2, 'chance de chuva no trecho']] : [[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
     const bar = (i, f, col) => f > 0.004 ? `<rect x="${xa(i)}" y="${f1(baseA - f * hA)}" width="${bwid(i)}" height="${f1(f * hA)}" fill="${col}"/>` : '';
     for(let i = 0; i < n; i++){
       const p = pts[i];
       if(p.pop == null){ g += `<rect x="${xa(i)}" y="${baseA - 2}" width="${bwid(i)}" height="2" fill="${none}"/>`; continue; }
-      g += bar(i, p.pop, r1);
+      /* a chance do Google é uma série só: usa o azul médio, que se destaca do fundo nos dois temas; o azul pálido fica para "qualquer chuva" do conjunto */
+      g += bar(i, p.pop, p.src === 'g' ? r2 : r1);
       if(p.ens && p.src !== 'g') g += bar(i, p.ens.p2, r2) + bar(i, p.ens.p6, r3);
     }
     /* a outra fonte, como linha por cima das barras: os modelos (tracejada) quando o Google é a principal; senão, o Google */

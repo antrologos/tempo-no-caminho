@@ -1150,6 +1150,9 @@ async function adopt(alts, i, ctx){
   route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
   if(G){ G.routeId = id; S.goog = G; } else if(gErr) S.goog = {routeId: id, error: gErr};
+  /* a viagem que estava na tela foi calculada para os trechos do caminho antigo: ela sai de cena antes de o mapa ser
+     redesenhado (senão os avisos antigos apontariam para trechos que o caminho novo não tem), e a nova é calculada logo abaixo */
+  S.trip = null; S.scrub = 0;
   endDraft();
   recompute({focusWorst: true});
   MapCtl.setTrip(!(ctx.keep || ctx.hold));
@@ -1886,6 +1889,14 @@ const Live = (() => {
     if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
     return '';
   }
+  /* fora do caminho traçado: o que o app vai fazer, em uma frase. A rota é refeita a partir da posição depois de 3 minutos
+     a mais de 800 m do caminho, no máximo a cada 15 minutos e 8 vezes por viagem. */
+  function offPlan(now){
+    if(last.sp.off <= EVERY.far) return `O app só refaz a rota se você se afastar mais de ${nf(EVERY.far)} m.`;
+    if(replans >= 8) return 'O app já refez a rota 8 vezes nesta viagem e não refaz mais sozinho; refaça a consulta se quiser.';
+    if(due.replan && now - due.replan <= EVERY.replan) return `A rota foi refeita às ${hhmm(due.replan)}; o app só refaz de novo depois das ${hhmm(due.replan + EVERY.replan)}.`;
+    return 'Se continuar assim por 3 minutos, o app refaz a rota a partir de onde você está.';
+  }
   /* a linha de estado que aparece quando o painel está recolhido (botão "Mapa") */
   const setMini = html => { const m = $('#live-mini'); if(m){ m.hidden = !html; m.innerHTML = html || ''; } };
   function render(){
@@ -1902,7 +1913,8 @@ const Live = (() => {
     if(!last || !S.trip){ box.innerHTML = `<p class="live-now">${esc(msg || 'Procurando a sua posição…')}</p>`; return; }
     const trip = S.trip, pts = trip.pts, N = pts.length, now = Date.now(), i = here();
     let h = `<p class="live-now"><strong>Agora:</strong> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}${trip.arr > now ? `, em ${durText((trip.arr - now) / 1000)}` : ''}.</p>`;
-    if(last.sp.off > 300) h += `<p class="live-warn">Você está a ${kmText(last.sp.off)} do caminho traçado. As horas abaixo valem para o ponto mais próximo dele.</p>`;
+    const off = last.sp.off > 300 ? `Você está a ${kmText(last.sp.off)} do caminho traçado. ${offPlan(now)}` : '';
+    if(off) h += `<p class="live-warn">${esc(off)} As horas abaixo valem para o ponto mais próximo do caminho.</p>`;
     const rows = [];
     for(const m of (S.routeMode === 'car' ? [10, 30, 60] : [5, 15, 30])){
       const tt = now + m * MIN;
@@ -1924,7 +1936,9 @@ const Live = (() => {
     if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
     if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
     if(S.wxAt && !S.gOnly) ups.push(`modelos às ${hhmm(S.wxAt)}`);
-    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` + (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
+    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` +
+      (off ? `<span class="lm-off">${esc(off)}</span>` : /^Rota refeita/.test(note) && due.replan && now - due.replan < 3 * MIN ? `<span class="lm-off">${esc(note)}</span>` : '') +
+      (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
     if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
     if(note) h += `<p class="live-calm">${esc(note)}</p>`;
     box.innerHTML = h;
@@ -2030,7 +2044,9 @@ const Live = (() => {
   }
   document.addEventListener('visibilitychange', () => { if(on() && document.visibilityState === 'visible') keepAwake(); });
   /* depois de uma rota refeita: a busca do ponto mais próximo recomeça do início do novo caminho */
-  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); };
+  /* a rota foi refeita: a última posição conhecida é levada para o caminho novo já, sem esperar a próxima leitura do GPS
+     (senão o painel seguiria dizendo "fora do caminho", com o quilômetro do caminho antigo) */
+  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); if(last && S.route) last.sp = snap(last.lon, last.lat); };
   /* só para os testes: encurta os intervalos */
   const _every = o => { Object.assign(EVERY, o); if(timer){ clearInterval(timer); timer = setInterval(tick, EVERY.tick); } };
   return {on, start, stop, render, rebase, _every, toggle: () => (on() ? stop() : start())};

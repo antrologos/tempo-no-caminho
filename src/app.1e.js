@@ -88,6 +88,7 @@ const Goog = (() => {
       temp: mk(h => h.temperature ? h.temperature.degrees : null),
       gust: mk(h => Wd(h).gust && Wd(h).gust.value != null ? Wd(h).gust.value : (Wd(h).speed ? Wd(h).speed.value : null)),
       vis: mk(h => h.visibility && h.visibility.distance != null ? h.visibility.distance * (h.visibility.unit === 'MILES' ? 1609 : 1000) : null),
+      rh: mk(h => h.relativeHumidity),
       day: mk(h => h.isDaytime, true),
       type: mk(h => h.weatherCondition ? h.weatherCondition.type : null, true)};
   }
@@ -109,7 +110,7 @@ const Goog = (() => {
     const h = Math.floor((t - G.t0) / HOUR);
     if(h < 0 || h >= G.hours) return null;
     const pop = G.pop[q][h], v = name => G[name] ? G[name][q][h] : null;
-    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), day: v('day'), type: v('type')};
+    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), rh: v('rh'), day: v('day'), type: v('type')};
   }
   /* a previsão do Google alcança quase todos os trechos, na hora em que a pessoa passa por eles? */
   function covers(G, samples, dep, k){

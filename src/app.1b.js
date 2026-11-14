@@ -379,7 +379,10 @@ function computeTrip(dep){
       if(night == null && gq.day != null) night = gq.day === false;
       if(!n){
         if((gq.th != null && gq.th >= 40) || /THUNDER/.test(gq.type || '')) thunder++;
-        if(gq.vis != null && gq.vis < 1000) fog++;
+        /* neblina pelo Google: ele não tem um aviso próprio de neblina fora do Japão e da Coreia, só a visibilidade prevista.
+           Conta como neblina possível a visibilidade de até 1 km, ou de até 2 km com o ar quase saturado e sem chuva forte
+           (previsões de visibilidade costumam ficar acima do que se vê na estrada). */
+        if(gq.vis != null && (gq.vis <= 1000 || (gq.vis <= 2000 && gq.rh != null && gq.rh >= 95 && !(gq.qpf >= 2)))) fog++;
       }
     }
     let klass = klassOf(pop);

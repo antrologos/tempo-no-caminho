@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-  <meta name="app-version" content="4.2">
+  <meta name="app-version" content="4.3">
 <title>Tempo no caminho</title>
 <meta name="description" content="Previsão do tempo ao longo de um trajeto: a chance e a força da chuva em cada trecho, na hora em que você passa por ele.">
 <meta name="theme-color" content="#F1F3F4" media="(prefers-color-scheme: light)">
@@ -24,7 +24,11 @@
 :root{
   --bg:#F1F3F4; --surface:#FFFFFF; --ink:#151A20; --muted:#5A6571; --line:#D6DBE0; --soft:#E7EBEE;
   --yellow:#F5C211; --on-yellow:#1A1600;
-  --dry:#39434E; --r1:#8FC4F2; --r2:#3F8FE3; --r3:#1B4FBE; --r4:#8A2BC2; --none:#C2C9D0;
+  /* Força da chuva: uma escala ordenada. Nos dois temas, quanto mais forte, mais funda e mais viva a cor
+     (do azul pálido ao violeta), nunca mais pálida. Conferida por cálculo: claridade sempre na mesma direção,
+     degraus de pelo menos 0,06 (OKLCH), contraste de 2:1 ou mais na ponta fraca e de 3:1 ou mais nas demais,
+     e vizinhas distinguíveis também com daltonismo. */
+  --dry:#39434E; --r1:#88B9EC; --r2:#4083DB; --r3:#1B3CDB; --r4:#370187; --none:#C2C9D0;
   --danger:#B3261E; --focus:#1B4FBE; --night:rgba(21,26,32,.075); --casing:#FFFFFF;
   --a1:#E3B008; --a2:#E8751A; --a3:#C8372D; --nightc:#5B4BC9;
   --font:"Overpass",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -35,14 +39,14 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0F1317; --surface:#171C22; --ink:#E7ECF0; --muted:#97A3AF; --line:#2B333C; --soft:#20272F;
-    --dry:#7F8B97; --r1:#3D76B2; --r2:#4FA0F5; --r3:#93CEFF; --r4:#E08BFF; --none:#3A444F;
+    --dry:#7F8B97; --r1:#CCE4FE; --r2:#86BAFE; --r3:#5B85F2; --r4:#763EFE; --none:#3A444F;
     --danger:#FF8A80; --focus:#93CEFF; --night:rgba(0,0,0,.36); --casing:#0A0D10;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0F1317; --surface:#171C22; --ink:#E7ECF0; --muted:#97A3AF; --line:#2B333C; --soft:#20272F;
-  --dry:#7F8B97; --r1:#3D76B2; --r2:#4FA0F5; --r3:#93CEFF; --r4:#E08BFF; --none:#3A444F;
+  --dry:#7F8B97; --r1:#CCE4FE; --r2:#86BAFE; --r3:#5B85F2; --r4:#763EFE; --none:#3A444F;
   --danger:#FF8A80; --focus:#93CEFF; --night:rgba(0,0,0,.36); --casing:#0A0D10;
   color-scheme:dark;
 }
@@ -307,7 +311,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
 .legend:empty{display:none}
 .lg-scale{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;max-width:540px;font-size:11.5px;line-height:1.2;color:var(--muted)}
 .lg-scale span{display:grid;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lg-scale i{height:5px;border-radius:3px;display:block}
+.lg-scale i{height:8px;border-radius:3px;display:block}
 .lg-lines{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--muted)}
 .lg-lines span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .lg-lines svg{width:30px;height:6px;flex:none;stroke:var(--ink);fill:none;stroke-width:3;stroke-linecap:round}
@@ -443,7 +447,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
 .layer-key{display:flex;flex-wrap:wrap;gap:3px 10px;max-width:100%;font-size:12px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 9px;pointer-events:auto}
 .layer-key:empty{display:none}
 .layer-key span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-.layer-key i{width:14px;height:5px;border-radius:3px;display:block}
+.layer-key i{width:16px;height:8px;border-radius:3px;display:block}
 @media (max-width:899px){
   .layers{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 6px);right:54px}
   .has-banner .layers{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 50px)}
@@ -694,6 +698,9 @@ body.has-upd .menubtn{position:relative}
 body.has-upd .menubtn::after{content:"";position:absolute;top:7px;right:7px;width:10px;height:10px;border-radius:50%;background:#E5484D;border:2px solid var(--surface)}
 
 .livemini .lm-stop{float:right;margin:0 0 4px 10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13.5px;font-weight:700}
+
+/* painel recolhido: aviso de que a pessoa saiu do caminho traçado, ou de que a rota acabou de ser refeita (versão 4.3) */
+.livemini .lm-off{display:block;margin-top:6px;font-size:13.5px;line-height:1.35;color:var(--muted)}
 
 </style>
 </head>
@@ -986,10 +993,10 @@ body.has-upd .menubtn::after{content:"";position:absolute;top:7px;right:7px;widt
           <p><strong>Incerteza.</strong> As faixas mostradas, na força da chuva e nos minutos de chuva, vão do valor que 10% das previsões não alcançam ao que só 10% ultrapassam. São intervalos de previsão, não garantias, e costumam sair mais estreitos do que deveriam.</p>
           <p><strong>Conferência.</strong> No fim desta tela, o app compara as previsões guardadas com a chuva observada por satélite (o produto IMERG, da NASA, com um ponto a cada 11 km, de meia em meia hora). A nota de erro vai de 0, perfeito, a 1. O satélite também erra, sobretudo em chuva fraca, então a nota é um guia e não uma sentença.</p>
           <p><strong>Teste e ajuste.</strong> O teste compara as previsões que os modelos fizeram na véspera com a chuva observada nos últimos 10 dias, no próprio trajeto. Com dados reais, ele mostrou que os modelos avisam chuva mais vezes do que chove. O teste também calcula um ajuste que desconta esse excesso, medido em dias que ficaram de fora do cálculo. O ajuste é um experimento feito para este app, com poucos dias de dados: fica desligado, e as chances mostradas são as dos modelos, a menos que você o ligue.</p>
-          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual previsão o app mostra.</strong> Com a chave, e para viagens nos próximos 7 dias, a previsão vem toda do Google: chance de chuva, volume esperado, trovoada, temperatura, vento, visibilidade e dia ou noite. Nesse caso os modelos não são consultados nem aparecem na tela, e o limite gratuito do Open-Meteo só é usado para a altitude do caminho. Os modelos entram quando o Google não cobre a viagem: sem chave, além de 7 dias ou se ele não responder. No menu dá para voltar à chance do conjunto de modelos. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
+          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual previsão o app mostra.</strong> Com a chave, e para viagens nos próximos 7 dias, a previsão vem toda do Google: chance de chuva, volume esperado, trovoada, temperatura, vento, visibilidade e dia ou noite. O Google não tem um aviso próprio de neblina no Brasil: o app avisa de neblina possível quando a visibilidade prevista por ele é de até 1 km, ou de até 2 km com o ar quase saturado. Nesse caso os modelos não são consultados nem aparecem na tela, e o limite gratuito do Open-Meteo só é usado para a altitude do caminho. Os modelos entram quando o Google não cobre a viagem: sem chave, além de 7 dias ou se ele não responder. No menu dá para voltar à chance do conjunto de modelos. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
           <p><strong>Modelos principais.</strong> Os quatro modelos de malha mais fina (ECMWF, GFS, ICON e UKMO) aparecem num quadro recolhido, para quem quiser comparar. Quando indicam algo mais forte do que o conjunto, o app avisa.</p>
           <p><strong>De onde vêm os dados.</strong> As medições (estações, balões, aviões, navios, radares e, principalmente, satélites) são trocadas entre os países. Cada centro meteorológico usa essas medições para montar o retrato da atmosfera e rodar o seu modelo. Este app recebe as previsões de até nove centros (europeu, americano, alemão, britânico, coreano, canadense, australiano, chinês e francês) por um único distribuidor, o Open-Meteo. Onde há menos medições e mais chuva isolada, como em boa parte do Brasil, a hora e o lugar exatos da chuva são menos confiáveis.</p>
-          <p><strong>No mapa.</strong> A linha segue a estrada de verdade. A cor é a força da chuva; quanto menor a chance, mais apagada a cor, até o cinza de trecho seco. As etiquetas amarelas marcam trovoada, neblina ou vento forte possíveis: toque para ver a hora e o lugar.</p>
+          <p><strong>No mapa.</strong> A linha segue a estrada de verdade. A cor é a força da chuva: quanto mais forte, mais funda e mais viva (do azul pálido da chuva fraca ao violeta da muito forte). Quanto menor a chance, mais apagada a cor, até o cinza de trecho seco. As etiquetas amarelas marcam trovoada, neblina ou vento forte possíveis: toque para ver a hora e o lugar.</p>
           <p><strong>Limites.</strong> Nenhum desses modelos tem malha fina o bastante para prever cada chuva isolada: há um limite para a precisão de lugar e hora. Os pesos do conjunto são um ponto de partida, ainda não ajustado com observações brasileiras: a conferência serve para isso. O serviço gratuito de previsão aceita umas 15 consultas novas por dia neste aparelho; repetir a mesma consulta em até 40 minutos, ou trocar a data dentro de três dias, não gasta.</p>
           <p><strong>Outras camadas.</strong> Os botões sobre o mapa trocam o que a linha mostra: chuva, vento, noite, neblina, trovoada, relevo ou tipo de pista. No gráfico, tudo aparece junto, uma faixa por assunto. O relevo tem três classes, medidas em trechos de cerca de 2 km: plano ou suave, ondulado (rampa média de 1% a 2,5%) e serra (rampa média de 2,5% ou mais, ou um trecho que sobe e desce com desnível equivalente). A altitude vem de um modelo de terreno com malha de 90 m, em até 200 pontos do trajeto. O tipo de pista vem dos dados de cada via no OpenStreetMap, lidos em dois pontos por trecho do caminho traçado: via de mão dupla numa pista só é pista simples; autoestrada ou via com sentidos separados é pista dupla. Onde o mapa não tem a via, o trecho fica sem informação. A qualidade depende de como a estrada foi cadastrada no mapa.</p>
           <p><strong>Trechos e consultas.</strong> Você escolhe de quantos em quantos minutos de viagem vai um trecho: 5, 7 ou 10. Os modelos detalhados são pedidos em no máximo 48 pontos, porque a malha deles é de 9 a 25 km, e as simulações, uma vez por célula de 25 km. Cada consulta nova gasta por volta de 600 do limite gratuito diário de 10.000 do Open-Meteo, que não pede cadastro nem cartão.</p>
@@ -1862,7 +1869,10 @@ function computeTrip(dep){
       if(night == null && gq.day != null) night = gq.day === false;
       if(!n){
         if((gq.th != null && gq.th >= 40) || /THUNDER/.test(gq.type || '')) thunder++;
-        if(gq.vis != null && gq.vis < 1000) fog++;
+        /* neblina pelo Google: ele não tem um aviso próprio de neblina fora do Japão e da Coreia, só a visibilidade prevista.
+           Conta como neblina possível a visibilidade de até 1 km, ou de até 2 km com o ar quase saturado e sem chuva forte
+           (previsões de visibilidade costumam ficar acima do que se vê na estrada). */
+        if(gq.vis != null && (gq.vis <= 1000 || (gq.vis <= 2000 && gq.rh != null && gq.rh >= 95 && !(gq.qpf >= 2)))) fog++;
       }
     }
     let klass = klassOf(pop);
@@ -2754,6 +2764,7 @@ const Goog = (() => {
       temp: mk(h => h.temperature ? h.temperature.degrees : null),
       gust: mk(h => Wd(h).gust && Wd(h).gust.value != null ? Wd(h).gust.value : (Wd(h).speed ? Wd(h).speed.value : null)),
       vis: mk(h => h.visibility && h.visibility.distance != null ? h.visibility.distance * (h.visibility.unit === 'MILES' ? 1609 : 1000) : null),
+      rh: mk(h => h.relativeHumidity),
       day: mk(h => h.isDaytime, true),
       type: mk(h => h.weatherCondition ? h.weatherCondition.type : null, true)};
   }
@@ -2775,7 +2786,7 @@ const Goog = (() => {
     const h = Math.floor((t - G.t0) / HOUR);
     if(h < 0 || h >= G.hours) return null;
     const pop = G.pop[q][h], v = name => G[name] ? G[name][q][h] : null;
-    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), day: v('day'), type: v('type')};
+    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), rh: v('rh'), day: v('day'), type: v('type')};
   }
   /* a previsão do Google alcança quase todos os trechos, na hora em que a pessoa passa por eles? */
   function covers(G, samples, dep, k){
@@ -3327,7 +3338,7 @@ function factsText(trip){
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
   const stops = S.demo ? '' : viaText(S.vias);
-  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Google.` : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google Maps' : 'OpenStreetMap'}. Previsão: inclui dados meteorológicos do Google.` : `${stops} Rota: ${r.google ? 'Google Maps' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? '; inclui dados meteorológicos do Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -3338,7 +3349,9 @@ const isAll = () => S.source === 'consenso';
 const modelP = p => (p.per[S.source] ? p.per[S.source].p : null);
 /* para o mapa, a lista e a leitura: força da chuva se chover + classe de chance */
 /* o resultado principal (mapa, lista, leitura e gráfico) vem sempre das simulações */
-const srcVal = p => p.klass ? p.amt : ((p.n || p.ens) ? 0 : null);
+/* força da chuva mostrada no trecho: o volume, se há chance; zero (seco), se há previsão e a chance é baixa; nulo só quando
+   nenhuma fonte cobre o trecho. Com a previsão toda do Google não há modelos, e a chance dele já é a previsão. */
+const srcVal = p => p.klass ? p.amt : ((p.n || p.ens || p.src === 'g') ? 0 : null);
 const srcKlass = p => p.klass;
 /* para o gráfico de baixo: só o que os modelos detalhados dizem (em "Todos", a mediana deles) */
 const barVal = p => isAll() ? p.med : modelP(p);
@@ -3405,6 +3418,9 @@ function histText(p){
   return h ? `Nos últimos ${h.days} dias, com chance ${h.band}, choveu em ${h.share} dos casos.` : '';
 }
 
+/* visibilidade em metros, dita de forma simples; 0 quer dizer "abaixo do que a fonte consegue informar" */
+const visText = v => v < 100 ? 'menos de 1 km' : v < 1000 ? `${nf(Math.round(v / 100) * 100)} m` : `${nf(v / 1000, (v < 3000 && Math.round(v / 100) % 10) ? 1 : 0)} km`;
+
 function renderReadout(){
   const i = S.scrub, p = S.trip.pts[i], s = S.samples[i], last = S.samples.length - 1, all = true;
   const v = srcVal(p), k = srcKlass(p), c = v == null ? -1 : (k ? Math.max(1, catOf(v)) : 0), km = nf(Math.round(p.km));
@@ -3442,6 +3458,8 @@ function renderReadout(){
   const air = [];
   if(p.temp != null) air.push(`${Math.round(p.temp)} °C`);
   if(p.gust != null) air.push(`rajadas de ${Math.round(p.gust)} km/h`);
+  /* visibilidade prevista, quando baixa (é dela que sai o aviso de neblina com os dados do Google) */
+  if(p.vis != null && p.vis < 5000) air.push('visibilidade de ' + visText(p.vis));
   if(air.length) facts.push(['Ar', air.join(', ')]);
   const road = [], tc = Traf.at(i);
   if(tc != null) road.push(tc === 2 ? 'trânsito congestionado' : tc === 1 ? 'trânsito lento' : 'trânsito livre');
@@ -3543,12 +3561,13 @@ function renderRuler(){
       const yy = Math.round(baseA - v * hA) + 0.5;
       g += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${L + pw}" y1="${yy}" y2="${yy}"/><text x="${L - 7}" y="${yy + 4}" text-anchor="end">${v * 100}%</text>`;
     });
-    g += legendRow(gMode ? [[r1, 'chance de chuva no trecho']] : [[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
+    g += legendRow(gMode ? [[r2, 'chance de chuva no trecho']] : [[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
     const bar = (i, f, col) => f > 0.004 ? `<rect x="${xa(i)}" y="${f1(baseA - f * hA)}" width="${bwid(i)}" height="${f1(f * hA)}" fill="${col}"/>` : '';
     for(let i = 0; i < n; i++){
       const p = pts[i];
       if(p.pop == null){ g += `<rect x="${xa(i)}" y="${baseA - 2}" width="${bwid(i)}" height="2" fill="${none}"/>`; continue; }
-      g += bar(i, p.pop, r1);
+      /* a chance do Google é uma série só: usa o azul médio, que se destaca do fundo nos dois temas; o azul pálido fica para "qualquer chuva" do conjunto */
+      g += bar(i, p.pop, p.src === 'g' ? r2 : r1);
       if(p.ens && p.src !== 'g') g += bar(i, p.ens.p2, r2) + bar(i, p.ens.p6, r3);
     }
     /* a outra fonte, como linha por cima das barras: os modelos (tracejada) quando o Google é a principal; senão, o Google */
@@ -5060,6 +5079,9 @@ async function adopt(alts, i, ctx){
   route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
   if(G){ G.routeId = id; S.goog = G; } else if(gErr) S.goog = {routeId: id, error: gErr};
+  /* a viagem que estava na tela foi calculada para os trechos do caminho antigo: ela sai de cena antes de o mapa ser
+     redesenhado (senão os avisos antigos apontariam para trechos que o caminho novo não tem), e a nova é calculada logo abaixo */
+  S.trip = null; S.scrub = 0;
   endDraft();
   recompute({focusWorst: true});
   MapCtl.setTrip(!(ctx.keep || ctx.hold));
@@ -5796,6 +5818,14 @@ const Live = (() => {
     if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
     return '';
   }
+  /* fora do caminho traçado: o que o app vai fazer, em uma frase. A rota é refeita a partir da posição depois de 3 minutos
+     a mais de 800 m do caminho, no máximo a cada 15 minutos e 8 vezes por viagem. */
+  function offPlan(now){
+    if(last.sp.off <= EVERY.far) return `O app só refaz a rota se você se afastar mais de ${nf(EVERY.far)} m.`;
+    if(replans >= 8) return 'O app já refez a rota 8 vezes nesta viagem e não refaz mais sozinho; refaça a consulta se quiser.';
+    if(due.replan && now - due.replan <= EVERY.replan) return `A rota foi refeita às ${hhmm(due.replan)}; o app só refaz de novo depois das ${hhmm(due.replan + EVERY.replan)}.`;
+    return 'Se continuar assim por 3 minutos, o app refaz a rota a partir de onde você está.';
+  }
   /* a linha de estado que aparece quando o painel está recolhido (botão "Mapa") */
   const setMini = html => { const m = $('#live-mini'); if(m){ m.hidden = !html; m.innerHTML = html || ''; } };
   function render(){
@@ -5812,7 +5842,8 @@ const Live = (() => {
     if(!last || !S.trip){ box.innerHTML = `<p class="live-now">${esc(msg || 'Procurando a sua posição…')}</p>`; return; }
     const trip = S.trip, pts = trip.pts, N = pts.length, now = Date.now(), i = here();
     let h = `<p class="live-now"><strong>Agora:</strong> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}${trip.arr > now ? `, em ${durText((trip.arr - now) / 1000)}` : ''}.</p>`;
-    if(last.sp.off > 300) h += `<p class="live-warn">Você está a ${kmText(last.sp.off)} do caminho traçado. As horas abaixo valem para o ponto mais próximo dele.</p>`;
+    const off = last.sp.off > 300 ? `Você está a ${kmText(last.sp.off)} do caminho traçado. ${offPlan(now)}` : '';
+    if(off) h += `<p class="live-warn">${esc(off)} As horas abaixo valem para o ponto mais próximo do caminho.</p>`;
     const rows = [];
     for(const m of (S.routeMode === 'car' ? [10, 30, 60] : [5, 15, 30])){
       const tt = now + m * MIN;
@@ -5834,7 +5865,9 @@ const Live = (() => {
     if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
     if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
     if(S.wxAt && !S.gOnly) ups.push(`modelos às ${hhmm(S.wxAt)}`);
-    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` + (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
+    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` +
+      (off ? `<span class="lm-off">${esc(off)}</span>` : /^Rota refeita/.test(note) && due.replan && now - due.replan < 3 * MIN ? `<span class="lm-off">${esc(note)}</span>` : '') +
+      (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
     if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
     if(note) h += `<p class="live-calm">${esc(note)}</p>`;
     box.innerHTML = h;
@@ -5940,7 +5973,9 @@ const Live = (() => {
   }
   document.addEventListener('visibilitychange', () => { if(on() && document.visibilityState === 'visible') keepAwake(); });
   /* depois de uma rota refeita: a busca do ponto mais próximo recomeça do início do novo caminho */
-  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); };
+  /* a rota foi refeita: a última posição conhecida é levada para o caminho novo já, sem esperar a próxima leitura do GPS
+     (senão o painel seguiria dizendo "fora do caminho", com o quilômetro do caminho antigo) */
+  const rebase = () => { vi = 0; lastShift = 0; offSince = 0; due.traf = Date.now(); due.goog = Date.now(); if(last && S.route) last.sp = snap(last.lon, last.lat); };
   /* só para os testes: encurta os intervalos */
   const _every = o => { Object.assign(EVERY, o); if(timer){ clearInterval(timer); timer = setInterval(tick, EVERY.tick); } };
   return {on, start, stop, render, rebase, _every, toggle: () => (on() ? stop() : start())};

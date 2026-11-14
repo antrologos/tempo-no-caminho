@@ -1,7 +1,9 @@
 /* Bancada de testes: abre o HTML final no Chromium headless e responde às chamadas
    de rede com dados simulados no MESMO formato das APIs reais (conferido no código-fonte
    do Open-Meteo, na documentação do OSRM e do Photon e nos estilos do OpenFreeMap). */
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+/* o Playwright do projeto (npm install) ou, na falta dele, o instalado na máquina de desenvolvimento */
+let chromium;
+try { ({ chromium } = require('playwright')); } catch (_) { ({ chromium } = require('/opt/npm-tools/node_modules/playwright')); }
 const fs = require('fs');
 const path = require('path');
 
@@ -228,7 +230,8 @@ function googleWeather(u, opt) {
       weatherCondition: { type: p > 2 ? 'RAIN_SHOWERS' : 'CLOUDY' }, temperature: { degrees: 24, unit: 'CELSIUS' },
       precipitation: { probability: { percent: prob, type: 'RAIN' }, qpf: { quantity: Math.round(p * 0.4 * 10) / 10, unit: 'MILLIMETERS' } }, thunderstormProbability: p > 5 ? 40 : 0 ,
       wind: { direction: { degrees: 120 }, speed: { value: 14, unit: 'KILOMETERS_PER_HOUR' }, gust: { value: p > 4 ? 58 : 22, unit: 'KILOMETERS_PER_HOUR' } },
-      visibility: { distance: (hl < 6.5 && uu > 0.8) ? 0.6 : 12, unit: 'KILOMETERS' }, relativeHumidity: 70, cloudCover: 60 });
+      visibility: { distance: hl < 6.5 ? (uu > 0.8 ? 0.6 : uu > 0.5 ? 2 : 12) : 12, unit: 'KILOMETERS' },
+      relativeHumidity: hl < 6.5 ? (uu > 0.8 ? 99 : uu > 0.62 ? 96 : uu > 0.5 ? 80 : 70) : 70, cloudCover: 60 });
   }
   const body = { forecastHours: out, timeZone: { id: 'America/Sao_Paulo' } };
   if (off + size < hours) body.nextPageToken = Buffer.from(String(off + size)).toString('base64');
@@ -296,7 +299,8 @@ function openMeteoEns(u, opt) {
 
 /* ---------- OpenFreeMap + CDN ---------- */
 function styleJson(name) {
-  return fs.readFileSync(path.join(REFS, 'ofm-styles/styles', name, 'style.json'), 'utf8').replace(/__TILEJSON_DOMAIN__/g, 'tiles.openfreemap.org');
+  const ref = path.join(REFS, 'ofm-styles/styles', name, 'style.json');          /* cópia de referência, se existir; senão, a do repositório */
+  return fs.readFileSync(fs.existsSync(ref) ? ref : path.join(__dirname, 'fixtures/ofm-styles', name, 'style.json'), 'utf8').replace(/__TILEJSON_DOMAIN__/g, 'tiles.openfreemap.org');
 }
 
 async function open(opt = {}) {

@@ -25,7 +25,7 @@ Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GP
 | O quê | Serviço | Observações |
 |---|---|---|
 | Caminho e tempo de viagem | Google Routes API (com chave) ou OSRM nos servidores da FOSSGIS | sem chave, o caminho é o do OpenStreetMap, sem trânsito |
-| Previsão do tempo, com chave | Google Weather API | viagens nos próximos 7 dias: chance de chuva, volume, trovoada, temperatura, vento, visibilidade e dia ou noite; 10.000 chamadas por mês sem cobrança. Nesse caso os modelos não são consultados |
+| Previsão do tempo, com chave | Google Weather API | viagens nos próximos 7 dias: chance de chuva, volume, trovoada, temperatura, vento, visibilidade (de onde sai o aviso de neblina) e dia ou noite; 10.000 chamadas por mês sem cobrança. Nesse caso os modelos não são consultados |
 | Previsão do tempo, sem chave ou além de 7 dias | Open-Meteo: simulações (ensembles) do ECMWF, GFS e ICON e modelos detalhados de até nove centros | uso gratuito não comercial, 10.000 chamadas por dia por rede |
 | Tipo de pista, faixas e piso | Overpass API (dados do OpenStreetMap) | lidos em dois pontos por trecho do caminho |
 | Relevo | Open-Meteo Elevation (modelo de terreno Copernicus, malha de 90 m) | até 200 pontos por viagem |
@@ -39,6 +39,14 @@ Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GP
 - Viagens salvas, preferências, a chave do Google e o registro das previsões ficam no armazenamento local do navegador, em cada aparelho.
 - **Nunca coloque uma chave no código nem neste repositório.** A chave é digitada na tela e fica só no navegador de quem a digitou. Quem abre o site sem chave usa apenas os serviços gratuitos.
 - Depois de publicar, restrinja a sua chave no Google Cloud ao endereço do site (restrição por site) e às três APIs usadas: Weather API, Routes API e Map Tiles API.
+
+## Termos do Google: o que cada pessoa deve conferir
+
+Quem usa o app com uma chave própria responde pelo uso dela perante o Google. Três regras dos [termos específicos do Google Maps Platform](https://cloud.google.com/maps-platform/terms/maps-service-terms) tocam diretamente este app (isto é um resumo, não uma orientação jurídica):
+
+- **Routes API**: o conteúdo dela não pode ser usado junto com um mapa que não seja do Google. Por isso o app só usa a rota do Google sobre o mapa do Google (Map Tiles API).
+- **Weather API, finalidade**: os termos proíbem usar os dados dela para recriar um produto do Google, e dão como exemplo um aplicativo de previsão do tempo cujo objetivo principal seja informar o tempo. Se este app se enquadra nesse exemplo é uma questão em aberto, que cada pessoa deve avaliar antes de usar a previsão do Google como fonte.
+- **Weather API, guarda de dados**: valores de previsão horária só podem ficar guardados por uma hora. A verificação das previsões guarda a chance do Google por mais tempo, até a chuva observada ficar disponível.
 
 ## Montar
 
@@ -86,6 +94,8 @@ Não é preciso instalar de novo a cada versão: o app instalado é a própria p
 - A chance de chuva sem ajuste costuma ser alta demais; a verificação mostra o quanto.
 - O tipo de pista depende de como a estrada foi cadastrada no OpenStreetMap.
 - Pontes e túneis podem enganar o relevo.
+- Com a previsão do Google, o aviso de neblina depende da visibilidade prevista por ele (até 1 km, ou até 2 km com o ar quase saturado). Fora do Japão e da Coreia do Sul, a Weather API não tem um aviso próprio de neblina, e não foi medido com que frequência ela indica visibilidade baixa no Brasil.
+- A altitude e o tipo de pista não vêm do Google: o serviço de altitude dele é feito para servidores (ou exige carregar a biblioteca Maps JavaScript), e a Routes API não informa pista simples ou dupla, número de faixas nem pavimento.
 - Vários caminhos de dados só foram testados com serviços simulados antes de chegar ao uso real.
 
 ## Licença e créditos
@@ -96,5 +106,5 @@ Código sob a licença MIT (arquivo `LICENSE`).
 - Previsão: Open-Meteo (CC BY 4.0), com dados do ECMWF, NOAA, DWD, Met Office e outros centros.
 - Mapa: OpenFreeMap e OpenMapTiles; MapLibre GL JS (BSD de 3 cláusulas).
 - Fonte Overpass: SIL Open Font License 1.1 (`src/fonts/LICENSE-Overpass.txt`).
-- Google Weather API e Routes API: uso sujeito aos termos do Google Maps Platform, com a chave de cada pessoa.
+- Google Weather API, Routes API e Map Tiles API: uso sujeito aos termos do Google Maps Platform, com a chave de cada pessoa. Onde aparecem dados do Google, o app mostra o crédito "inclui dados meteorológicos do Google" e o logotipo no mapa.
 - Chuva observada: NASA GIBS, produto IMERG.

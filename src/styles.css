@@ -6,7 +6,11 @@
 :root{
   --bg:#F1F3F4; --surface:#FFFFFF; --ink:#151A20; --muted:#5A6571; --line:#D6DBE0; --soft:#E7EBEE;
   --yellow:#F5C211; --on-yellow:#1A1600;
-  --dry:#39434E; --r1:#8FC4F2; --r2:#3F8FE3; --r3:#1B4FBE; --r4:#8A2BC2; --none:#C2C9D0;
+  /* Força da chuva: uma escala ordenada. Nos dois temas, quanto mais forte, mais funda e mais viva a cor
+     (do azul pálido ao violeta), nunca mais pálida. Conferida por cálculo: claridade sempre na mesma direção,
+     degraus de pelo menos 0,06 (OKLCH), contraste de 2:1 ou mais na ponta fraca e de 3:1 ou mais nas demais,
+     e vizinhas distinguíveis também com daltonismo. */
+  --dry:#39434E; --r1:#88B9EC; --r2:#4083DB; --r3:#1B3CDB; --r4:#370187; --none:#C2C9D0;
   --danger:#B3261E; --focus:#1B4FBE; --night:rgba(21,26,32,.075); --casing:#FFFFFF;
   --a1:#E3B008; --a2:#E8751A; --a3:#C8372D; --nightc:#5B4BC9;
   --font:"Overpass",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -17,14 +21,14 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0F1317; --surface:#171C22; --ink:#E7ECF0; --muted:#97A3AF; --line:#2B333C; --soft:#20272F;
-    --dry:#7F8B97; --r1:#3D76B2; --r2:#4FA0F5; --r3:#93CEFF; --r4:#E08BFF; --none:#3A444F;
+    --dry:#7F8B97; --r1:#CCE4FE; --r2:#86BAFE; --r3:#5B85F2; --r4:#763EFE; --none:#3A444F;
     --danger:#FF8A80; --focus:#93CEFF; --night:rgba(0,0,0,.36); --casing:#0A0D10;
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0F1317; --surface:#171C22; --ink:#E7ECF0; --muted:#97A3AF; --line:#2B333C; --soft:#20272F;
-  --dry:#7F8B97; --r1:#3D76B2; --r2:#4FA0F5; --r3:#93CEFF; --r4:#E08BFF; --none:#3A444F;
+  --dry:#7F8B97; --r1:#CCE4FE; --r2:#86BAFE; --r3:#5B85F2; --r4:#763EFE; --none:#3A444F;
   --danger:#FF8A80; --focus:#93CEFF; --night:rgba(0,0,0,.36); --casing:#0A0D10;
   color-scheme:dark;
 }
@@ -289,7 +293,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
 .legend:empty{display:none}
 .lg-scale{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;max-width:540px;font-size:11.5px;line-height:1.2;color:var(--muted)}
 .lg-scale span{display:grid;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lg-scale i{height:5px;border-radius:3px;display:block}
+.lg-scale i{height:8px;border-radius:3px;display:block}
 .lg-lines{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--muted)}
 .lg-lines span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .lg-lines svg{width:30px;height:6px;flex:none;stroke:var(--ink);fill:none;stroke-width:3;stroke-linecap:round}
@@ -425,7 +429,7 @@ input[type="date"].input,input[type="time"].input{font-variant-numeric:tabular-n
 .layer-key{display:flex;flex-wrap:wrap;gap:3px 10px;max-width:100%;font-size:12px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 9px;pointer-events:auto}
 .layer-key:empty{display:none}
 .layer-key span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-.layer-key i{width:14px;height:5px;border-radius:3px;display:block}
+.layer-key i{width:16px;height:8px;border-radius:3px;display:block}
 @media (max-width:899px){
   .layers{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 6px);right:54px}
   .has-banner .layers{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 50px)}
@@ -676,3 +680,6 @@ body.has-upd .menubtn{position:relative}
 body.has-upd .menubtn::after{content:"";position:absolute;top:7px;right:7px;width:10px;height:10px;border-radius:50%;background:#E5484D;border:2px solid var(--surface)}
 
 .livemini .lm-stop{float:right;margin:0 0 4px 10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13.5px;font-weight:700}
+
+/* painel recolhido: aviso de que a pessoa saiu do caminho traçado, ou de que a rota acabou de ser refeita (versão 4.3) */
+.livemini .lm-off{display:block;margin-top:6px;font-size:13.5px;line-height:1.35;color:var(--muted)}
