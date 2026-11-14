@@ -19,7 +19,7 @@ const errs = o => JSON.stringify(o.log.errors.filter(e => !/Failed to load resou
     console.log('NO TRECHO 30', JSON.stringify(await panel()).slice(0, 560));
     await ctx.setGeolocation({ latitude: p30.latitude + 0.02, longitude: p30.longitude, accuracy: 15 }); await o.page.waitForTimeout(2000);
     console.log('FORA DO CAMINHO', (await panel()).painel.slice(0, 230));
-    await o.page.locator('#live-btn').click(); await o.page.waitForTimeout(500);
+    await o.page.locator('#lm-stop').click(); await o.page.waitForTimeout(500);          /* painel recolhido: encerra pelo botão "Parar" da linha de estado */
     console.log('PARADO', JSON.stringify(await panel()));
     console.log('pedidos de rede durante o acompanhamento (não deveria haver consultas novas de clima):', o.log.requests.filter(u => /open-meteo/.test(u) && /start_date/.test(u)).length);
   } catch (e) { console.log('FALHA', e.message.slice(0, 300)); await o.page.screenshot({ path: 'shots/v38-fail.png' }); }

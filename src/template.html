@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+  <meta name="app-version" content="4.2">
 <title>Tempo no caminho</title>
 <meta name="description" content="Previsão do tempo ao longo de um trajeto: a chance e a força da chuva em cada trecho, na hora em que você passa por ele.">
 <meta name="theme-color" content="#F1F3F4" media="(prefers-color-scheme: light)">
@@ -43,6 +44,7 @@
     <symbol id="i-grab" viewBox="0 0 20 20"><path d="M4.500 7h11M4.500 10h11M4.500 13h11"/></symbol>
     <symbol id="i-loc" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.200"/><path d="M10 2.500v3M10 14.500v3M2.500 10h3M14.500 10h3"/></symbol>
     <symbol id="i-relief" viewBox="0 0 20 20"><path d="M2.5 15.5l5-8.2 3 4.700 2.2-3 4.800 6.500z"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 20 20"><path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17h-4.5M7.5 17H3v-4.5"/></symbol>
     <symbol id="i-star" viewBox="0 0 20 20"><path d="M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.800 8.100l5-.7z"/></symbol>
   </defs>
 </svg>
@@ -146,11 +148,13 @@
 
   <main class="layout" id="layout" data-sheet="peek">
     <div class="sheetbar" id="sheetbar" role="group" aria-label="Quanto do painel mostrar">
+      <button type="button" data-sheet="mini" aria-pressed="false">Mapa</button>
       <button type="button" data-sheet="peek" aria-pressed="true">Resumo</button>
       <button type="button" data-sheet="half" aria-pressed="false">Gráfico</button>
       <button type="button" data-sheet="full" aria-pressed="false">Detalhes</button>
     </div>
 
+    <div class="livemini" id="live-mini" hidden></div>
     <div class="dtabs" id="dtabs" role="tablist" aria-label="Seções do resultado">
       <button type="button" role="tab" data-tab="resumo" aria-selected="true">Resumo</button>
       <button type="button" role="tab" data-tab="grafico" aria-selected="false">Gráfico</button>
@@ -193,6 +197,9 @@
     <div class="pin" id="pin">
       <div class="mapwrap" id="mapwrap">
         <div id="map" class="map"></div>
+        <button type="button" class="mapbtn" id="recenter" aria-label="Centralizar o mapa na minha posição" title="Centralizar o mapa na minha posição"><svg class="ic" aria-hidden="true"><use href="#i-loc"/></svg></button>
+        <button type="button" class="mapbtn" id="fitall" aria-label="Enquadrar a rota inteira" title="Enquadrar a rota inteira" hidden><svg class="ic" aria-hidden="true"><use href="#i-fit"/></svg></button>
+        <div class="glogo" id="glogo" hidden><img id="glogo-img" alt="Google" height="22"><span id="glogo-text"></span></div>
         <div class="pickbar" id="pickbar" hidden><span id="pickbar-text"></span><button type="button" id="pick-cancel">Cancelar</button></div>
         <div class="mapmenu" id="mapmenu" hidden role="menu" aria-label="Usar este ponto">
           <button type="button" role="menuitem" data-act="from">Partir daqui</button>
@@ -250,7 +257,7 @@
       </div>
       <label class="pref">Chance de chuva mostrada
         <select id="pref-prim">
-          <option value="g">A do Google, onde ele alcança (recomendado)</option>
+          <option value="g">A do Google; os modelos só entram se ele não cobrir a viagem</option>
           <option value="app">A do conjunto de modelos</option>
         </select>
       </label>
@@ -301,7 +308,7 @@
           <p><strong>Incerteza.</strong> As faixas mostradas, na força da chuva e nos minutos de chuva, vão do valor que 10% das previsões não alcançam ao que só 10% ultrapassam. São intervalos de previsão, não garantias, e costumam sair mais estreitos do que deveriam.</p>
           <p><strong>Conferência.</strong> No fim desta tela, o app compara as previsões guardadas com a chuva observada por satélite (o produto IMERG, da NASA, com um ponto a cada 11 km, de meia em meia hora). A nota de erro vai de 0, perfeito, a 1. O satélite também erra, sobretudo em chuva fraca, então a nota é um guia e não uma sentença.</p>
           <p><strong>Teste e ajuste.</strong> O teste compara as previsões que os modelos fizeram na véspera com a chuva observada nos últimos 10 dias, no próprio trajeto. Com dados reais, ele mostrou que os modelos avisam chuva mais vezes do que chove. O teste também calcula um ajuste que desconta esse excesso, medido em dias que ficaram de fora do cálculo. O ajuste é um experimento feito para este app, com poucos dias de dados: fica desligado, e as chances mostradas são as dos modelos, a menos que você o ligue.</p>
-          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual chance o app mostra.</strong> Com a chave, a chance de chuva mostrada em cada trecho é a do Google, nas viagens dos próximos 7 dias: nas verificações feitas com este app, ela errou bem menos que a do conjunto de modelos. O conjunto continua dando o volume quando chove, o tipo de chuva e a chance das viagens que o Google não alcança, e aparece como linha tracejada no gráfico. No menu dá para voltar à chance do conjunto. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
+          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual previsão o app mostra.</strong> Com a chave, e para viagens nos próximos 7 dias, a previsão vem toda do Google: chance de chuva, volume esperado, trovoada, temperatura, vento, visibilidade e dia ou noite. Nesse caso os modelos não são consultados nem aparecem na tela, e o limite gratuito do Open-Meteo só é usado para a altitude do caminho. Os modelos entram quando o Google não cobre a viagem: sem chave, além de 7 dias ou se ele não responder. No menu dá para voltar à chance do conjunto de modelos. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
           <p><strong>Modelos principais.</strong> Os quatro modelos de malha mais fina (ECMWF, GFS, ICON e UKMO) aparecem num quadro recolhido, para quem quiser comparar. Quando indicam algo mais forte do que o conjunto, o app avisa.</p>
           <p><strong>De onde vêm os dados.</strong> As medições (estações, balões, aviões, navios, radares e, principalmente, satélites) são trocadas entre os países. Cada centro meteorológico usa essas medições para montar o retrato da atmosfera e rodar o seu modelo. Este app recebe as previsões de até nove centros (europeu, americano, alemão, britânico, coreano, canadense, australiano, chinês e francês) por um único distribuidor, o Open-Meteo. Onde há menos medições e mais chuva isolada, como em boa parte do Brasil, a hora e o lugar exatos da chuva são menos confiáveis.</p>
           <p><strong>No mapa.</strong> A linha segue a estrada de verdade. A cor é a força da chuva; quanto menor a chance, mais apagada a cor, até o cinza de trecho seco. As etiquetas amarelas marcam trovoada, neblina ou vento forte possíveis: toque para ver a hora e o lugar.</p>
@@ -312,6 +319,7 @@
           <p><strong>Acompanhar a viagem.</strong> Com o app aberto num endereço seguro (https) ou instalado, o botão "Acompanhar a viagem" usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho; a hora de cada trecho à frente passa a contar a partir de agora, e o painel mostra o que vem em 10, 30 e 60 minutos (5, 15 e 30 a pé ou de bicicleta) e o próximo aviso. Durante o acompanhamento o app se atualiza sozinho: o trânsito, a partir da sua posição, a cada 5 minutos; a chuva pelo Google nos trechos à frente, a cada 15 minutos; os modelos e as simulações, a cada 3 horas, porque mudam poucas vezes por dia e o serviço gratuito é limitado. Se você ficar a mais de 800 m do caminho traçado por mais de três minutos, a rota é refeita a partir de onde você está, no máximo a cada 15 minutos e 8 vezes por viagem, porque cada rota refeita gasta uma consulta inteira de previsão. O painel mostra a hora da última atualização de cada dado.</p>
           <p><strong>Partida, chegada e horário.</strong> Tanto a partida quanto a chegada podem ser a sua localização, lida pelo GPS do aparelho: escolha "Minha localização" na lista que aparece ao tocar no campo. Isso só funciona com o app aberto no endereço https ou instalado. O horário de saída começa sempre em "agora" e não pode ficar no passado; para outro horário, altere o dia e a hora.</p>
           <p><strong>Paradas, pontos no mapa e rotas alternativas.</strong> Você pode incluir até 8 paradas entre a partida e a chegada e mudar a ordem arrastando pelo ícone de três traços; a partida e a chegada entram na mesma ordem. Para marcar um ponto no mapa, toque nele (fora da linha da rota) e escolha partir dali, passar por ali ou chegar ali. Para mudar só um trecho, puxe a linha da rota com o mouse (no computador) ou use “Passar por aqui”: o app pede ao Google que passe pelo ponto novo e mantenha o resto do caminho, guardando alguns pontos da rota atual. O ponto de passagem aparece como uma bolinha branca; clicar nela o retira. O app primeiro traça o caminho e mostra as rotas possíveis; a previsão do tempo só é buscada depois que você confirma o caminho, para não gastar consultas enquanto a rota ainda está sendo definida. Quando não há paradas, o app pede também as rotas alternativas e mostra cada uma com o tempo e a distância; a previsão é buscada para a rota escolhida, e para as outras só quando você toca nelas, porque cada rota gasta uma consulta inteira de previsão.</p>
+          <p><strong>Mapa de fundo.</strong> Quando a rota é do Google, o mapa de fundo também é o do Google (Map Tiles API): é uma exigência dos termos dele, e evita que a linha da rota saia do desenho da estrada. Se essa API não estiver liberada na chave, o app usa o mapa e a rota do OpenStreetMap e avisa. Sem chave, tudo vem do OpenStreetMap. No celular, o botão “Mapa” recolhe o painel e deixa o mapa à vista; o botão de mira, sobre o mapa, volta para a sua posição.</p>
           <p><strong>Tempo de viagem.</strong> A rota vem do OpenStreetMap e não enxerga trânsito ao vivo, obras nem paradas. Use a folga para aproximar da sua realidade. Os horários seguem o fuso do seu aparelho.</p>
           <p><strong>Prazo.</strong> Quanto mais distante a data, menos confiáveis são a hora e o lugar exatos da chuva. Além de dois ou três dias, vale mais a tendência do que o detalhe. Confira de novo perto da saída.</p>
           <p><strong>O que não aparece aqui.</strong> Interdições, quedas de barreira, alagamentos e avisos oficiais. Antes de pegar a estrada, veja os alertas do INMET e da Defesa Civil e as condições da rodovia com a PRF ou a concessionária.</p>
@@ -325,6 +333,12 @@
   <div class="drawer" id="drawer" hidden>
     <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       <div class="drawer-top"><h2 id="drawer-title">Menu</h2><button type="button" class="inbtn" id="drawer-close" aria-label="Fechar o menu"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <section class="menu-sec" id="upd-sec">
+        <h3>Versão e atualização</h3>
+        <p>Versão <strong id="upd-ver"></strong>. O app instalado é esta mesma página: ele se atualiza sozinho ao abrir com internet, sem instalar de novo. Se quiser conferir na hora, use o botão.</p>
+        <div class="conf-btns"><button type="button" class="btn-conf" id="upd-btn">Procurar atualização</button></div>
+        <p class="conf-status" id="upd-status" role="status"></p>
+      </section>
       <section class="menu-sec">
         <h3>Instalar como aplicativo</h3>
         <p id="install-text"></p>
@@ -340,12 +354,12 @@
             <li>Abra <strong>console.cloud.google.com</strong> com a sua conta do Google.</li>
             <li>Crie um projeto, com qualquer nome.</li>
             <li>Se o Google pedir, ative o faturamento do projeto.</li>
-            <li>No menu, vá em “APIs &amp; Services” e depois em “Library”. Procure e ative a <strong>Weather API</strong> e a <strong>Routes API</strong>.</li>
+            <li>No menu, vá em “APIs &amp; Services” e depois em “Library”. Procure e ative três serviços: a <strong>Weather API</strong> (previsão), a <strong>Routes API</strong> (rota e trânsito) e a <strong>Map Tiles API</strong> (o mapa de fundo; o Google exige que a rota dele apareça sobre o mapa dele).</li>
             <li>Vá em “APIs &amp; Services”, “Credentials”, “Create credentials”, “API key”.</li>
-            <li>Abra a chave criada. Em “API restrictions”, escolha “Restrict key” e marque só essas duas APIs. Em “Application restrictions”, escolha “Websites” e acrescente o endereço deste site, terminado em /*.</li>
+            <li>Abra a chave criada. Em “API restrictions”, escolha “Restrict key” e marque só essas três APIs. Em “Application restrictions”, escolha “Websites” e acrescente o endereço deste site, terminado em /*.</li>
             <li>Copie a chave, cole no campo “Chave do Google”, logo abaixo, e toque em “Salvar e testar”.</li>
           </ol>
-          <p>Uso mensal sem cobrança, pelo que consta nas páginas do Google: 10.000 consultas de clima; 5.000 rotas com trânsito; 1.000 rotas com a intensidade do trânsito por trecho.</p>
+          <p>Uso mensal sem cobrança, pelo que consta nas páginas do Google: 10.000 consultas de clima; 5.000 rotas com trânsito; 1.000 rotas com a intensidade do trânsito por trecho; 100.000 imagens do mapa de fundo.</p>
         </details>
       </section>
       <div id="drawer-slots"></div>

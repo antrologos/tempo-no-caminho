@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const FIXTURES = path.join(__dirname, 'fixtures');          /* estilos do OpenFreeMap usados só para simular o mapa nos testes */
+const REFS = '/home/claude/refs';
 const HOUR = 3600e3;
 
 const WP = [
@@ -226,7 +226,9 @@ function googleWeather(u, opt) {
     const prob = Math.round(Math.min(95, 100 * (1 - Math.exp(-p * 0.35))));
     out.push({ interval: { startTime: new Date(ms).toISOString().replace('.000Z', 'Z'), endTime: new Date(ms + HOUR).toISOString().replace('.000Z', 'Z') }, isDaytime: hl > 5.3 && hl < 18.4,
       weatherCondition: { type: p > 2 ? 'RAIN_SHOWERS' : 'CLOUDY' }, temperature: { degrees: 24, unit: 'CELSIUS' },
-      precipitation: { probability: { percent: prob, type: 'RAIN' }, qpf: { quantity: Math.round(p * 0.4 * 10) / 10, unit: 'MILLIMETERS' } }, thunderstormProbability: p > 5 ? 40 : 0 });
+      precipitation: { probability: { percent: prob, type: 'RAIN' }, qpf: { quantity: Math.round(p * 0.4 * 10) / 10, unit: 'MILLIMETERS' } }, thunderstormProbability: p > 5 ? 40 : 0 ,
+      wind: { direction: { degrees: 120 }, speed: { value: 14, unit: 'KILOMETERS_PER_HOUR' }, gust: { value: p > 4 ? 58 : 22, unit: 'KILOMETERS_PER_HOUR' } },
+      visibility: { distance: (hl < 6.5 && uu > 0.8) ? 0.6 : 12, unit: 'KILOMETERS' }, relativeHumidity: 70, cloudCover: 60 });
   }
   const body = { forecastHours: out, timeZone: { id: 'America/Sao_Paulo' } };
   if (off + size < hours) body.nextPageToken = Buffer.from(String(off + size)).toString('base64');
@@ -294,7 +296,7 @@ function openMeteoEns(u, opt) {
 
 /* ---------- OpenFreeMap + CDN ---------- */
 function styleJson(name) {
-  return fs.readFileSync(path.join(FIXTURES, 'ofm-styles', name, 'style.json'), 'utf8').replace(/__TILEJSON_DOMAIN__/g, 'tiles.openfreemap.org');
+  return fs.readFileSync(path.join(REFS, 'ofm-styles/styles', name, 'style.json'), 'utf8').replace(/__TILEJSON_DOMAIN__/g, 'tiles.openfreemap.org');
 }
 
 async function open(opt = {}) {
@@ -354,6 +356,15 @@ async function open(opt = {}) {
           }
           if (body.computeAlternativeRoutes && !opt.noAlts) return json({ routes: [r, variant(0.06, 1.06, 1.09, 'SP-070 e BR-116'), variant(-0.07, 1.15, 1.04, 'RJ-155')] });
           return json({ routes: [r] }); } }
+      if (u.hostname === 'tile.googleapis.com') {
+        log.requests.push(url);
+        if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, GET, OPTIONS' } });
+        if (opt.noTiles) return json({ error: { code: 403, message: 'Map Tiles API has not been used in this project before or it is disabled.', status: 'PERMISSION_DENIED' } }, 403);
+        if (u.pathname.endsWith('/createSession')) return json({ session: 'sessao-de-teste', expiry: String(Math.round(Date.now() / 1000) + 1209600), tileWidth: 512, tileHeight: 512, imageFormat: 'png' });
+        if (u.pathname.includes('/viewport')) return json({ copyright: 'Dados do mapa ©2026 Google', maxZoomRects: [] });
+        return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64') });
+      }
+      if (u.hostname === 'maps.gstatic.com') return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="66" height="26"><text y="18">Google</text></svg>' });
       if (u.hostname === 'weather.googleapis.com') { log.requests.push(url); if (opt.noGoogle) return route.abort(); const r = googleWeather(u, opt); return json(r.body, r.status); }
       if (u.hostname === 'previous-runs-api.open-meteo.com') { log.requests.push(url); if (opt.noPrev) return json({ error: true, reason: 'x' }, 400); const r = openMeteo(u, opt); return json(r.body, r.status); }
       if (u.hostname === 'gibs.earthdata.nasa.gov') { log.requests.push(url); if (opt.noGibs) return route.fulfill({ status: 503, body: 'fora do ar' }); return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: await gibsPng(u, opt) }); }

@@ -43,20 +43,20 @@ const Goog = (() => {
     if(!r.length) throw new Error('resposta vazia');
     return true;
   }
-  /* busca a previsão horária em 7 a 17 pontos do trajeto, do momento atual até 6 horas depois da chegada (no máximo 7 dias) */
-  /* opt.from: no acompanhamento, consulta só os trechos à frente do ponto em que a pessoa está; opt.force: ignora o que já está guardado */
-  async function load(opt = {}){
-    const key = getKey();
-    if(!key || S.demo || !S.samples || !S.trip) return null;
-    const trip = S.trip, now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = S.routeId;
-    if(trip.arr < now) return (S.goog = {routeId: rid, skip: 'passada'});
-    const need = Math.ceil((trip.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
-    if(need > MAXH + 6) return (S.goog = {routeId: rid, skip: 'longe'});
+  /* Monta a previsão horária do Google para um conjunto de trechos (ctx: samples, dep, arr, rid), de agora até
+     6 horas depois da chegada, no máximo 7 dias. Em 7 a 17 pontos do trajeto, ou em todos, no uso completo.
+     opt.from: no acompanhamento, só os trechos à frente; opt.reuse: uma previsão recente que ainda serve. */
+  async function build(ctx, opt = {}){
+    const key = getKey(), now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = ctx.rid;
+    if(ctx.arr < now) return {routeId: rid, skip: 'passada'};
+    const need = Math.ceil((ctx.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
+    if(need > MAXH + 6) return {routeId: rid, skip: 'longe'};
     /* como fonte principal, o Google também alimenta o gráfico dos outros horários de saída: cobre até o fim do dia da partida */
-    const endDay = startOfDay(trip.dep) + DAY + (trip.arr - trip.dep);
+    const endDay = startOfDay(ctx.dep) + DAY + (ctx.arr - ctx.dep);
     const hours = Math.min(MAXH, opt.from == null && primGoogle() ? Math.max(need, Math.ceil((endDay - H0) / HOUR) + 1) : need);
-    if(!opt.force && S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
-    const N = S.samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
+    const R = opt.reuse;
+    if(R && R.pop && R.routeId === rid && R.hours >= hours && R.full === use().full && now - R.when < 30 * MIN) return R;
+    const samples = ctx.samples, N = samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
     const nPts = Math.min(M, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
     for(let q = 0; q < nPts; q++){ const i = i0 + Math.round(q * (M - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
     if(usage() + idx.length * pages > U.stop) throw new Error('o app atingiu o limite mensal que ele mesmo adota para o Google; volta no mês que vem');
@@ -66,26 +66,39 @@ const Goog = (() => {
       for(;;){
         const q = next++;
         if(q >= idx.length) return;
-        const s = S.samples[idx[q]];
-        res[q] = await fetchPoint(s.lat, s.lon, hours, key);
+        const sm = samples[idx[q]];
+        res[q] = await fetchPoint(sm.lat, sm.lon, hours, key);
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    if(rid !== S.routeId) return null;
     const start = h => Date.parse(h && h.interval && h.interval.startTime);
     const t0 = Math.min(...res.map(r => (r.length && isFinite(start(r[0]))) ? start(r[0]) : Infinity));
     if(!isFinite(t0)) throw new Error('resposta sem horários');
-    const mk = f => res.map(r => {
+    /* um vetor por ponto consultado, com o valor de cada hora; any: aceita texto e sim/não, além de número */
+    const mk = (f, any) => res.map(r => {
       const a = new Array(hours).fill(null);
-      r.forEach(h => { const k = Math.round((start(h) - t0) / HOUR); if(k >= 0 && k < hours){ const v = f(h); a[k] = (typeof v === 'number' && isFinite(v)) ? v : null; } });
+      r.forEach(h => { const k = Math.round((start(h) - t0) / HOUR); if(k >= 0 && k < hours){ const v = f(h); a[k] = any ? (v == null ? null : v) : ((typeof v === 'number' && isFinite(v)) ? v : null); } });
       return a;
     });
-    const P = h => h.precipitation || {};
-    S.goog = {routeId: rid, when: now, t0, hours, idx, calls: usage() - u0, full: U.full,
+    const P = h => h.precipitation || {}, Wd = h => h.wind || {};
+    return {routeId: rid, when: now, t0, hours, idx, calls: usage() - u0, full: U.full,
       pop: mk(h => P(h).probability ? P(h).probability.percent / 100 : null),
       qpf: mk(h => P(h).qpf ? P(h).qpf.quantity : null),
-      th: mk(h => h.thunderstormProbability)};
-    return S.goog;
+      th: mk(h => h.thunderstormProbability),
+      temp: mk(h => h.temperature ? h.temperature.degrees : null),
+      gust: mk(h => Wd(h).gust && Wd(h).gust.value != null ? Wd(h).gust.value : (Wd(h).speed ? Wd(h).speed.value : null)),
+      vis: mk(h => h.visibility && h.visibility.distance != null ? h.visibility.distance * (h.visibility.unit === 'MILES' ? 1609 : 1000) : null),
+      day: mk(h => h.isDaytime, true),
+      type: mk(h => h.weatherCondition ? h.weatherCondition.type : null, true)};
+  }
+  /* busca (ou reaproveita) a previsão do Google para a viagem que está na tela */
+  async function load(opt = {}){
+    const key = getKey();
+    if(!key || S.demo || !S.samples || !S.trip) return null;
+    const rid = S.routeId;
+    const G = await build({samples: S.samples, dep: S.trip.dep, arr: S.trip.arr, rid}, Object.assign({}, opt, {reuse: opt.force ? null : S.goog}));
+    if(rid !== S.routeId) return null;
+    return (S.goog = G);
   }
   /* o que o Google diz para a amostra i no instante t (o ponto consultado mais próximo no trajeto) */
   function at(i, t){
@@ -95,10 +108,80 @@ const Goog = (() => {
     for(let k = 1; k < G.idx.length; k++) if(Math.abs(G.idx[k] - i) < Math.abs(G.idx[q] - i)) q = k;
     const h = Math.floor((t - G.t0) / HOUR);
     if(h < 0 || h >= G.hours) return null;
-    const pop = G.pop[q][h];
-    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h]};
+    const pop = G.pop[q][h], v = name => G[name] ? G[name][q][h] : null;
+    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), day: v('day'), type: v('type')};
   }
-  return {getKey, setKey, test, load, at, usage, FREE, DAYS, stop: () => use().stop};
+  /* a previsão do Google alcança quase todos os trechos, na hora em que a pessoa passa por eles? */
+  function covers(G, samples, dep, k){
+    if(!G || !G.pop) return false;
+    let ok = 0;
+    samples.forEach((sm, i) => {
+      const h = Math.floor((dep + sm.t * 1000 * k - G.t0) / HOUR);
+      if(h < 0 || h >= G.hours) return;
+      let q = 0;
+      for(let j = 1; j < G.idx.length; j++) if(Math.abs(G.idx[j] - i) < Math.abs(G.idx[q] - i)) q = j;
+      if(G.pop[q][h] != null) ok++;
+    });
+    return ok >= samples.length * 0.9;
+  }
+  return {getKey, setKey, test, load, build, covers, at, usage, FREE, DAYS, stop: () => use().stop};
+})();
+
+/* ================= mapa de fundo do Google (Map Tiles API) =================
+   O Google exige que a rota calculada por ele apareça sobre um mapa dele, e não sobre o de outro fornecedor.
+   Com a chave e a Map Tiles API liberada, o fundo do mapa passa a ser o do Google. Se ela não abrir, o app
+   fica com o mapa e a rota do OpenStreetMap, e avisa. */
+API.gtiles = 'https://tile.googleapis.com';
+const GMap = (() => {
+  const KEY = 'tnc-gmap-v1';
+  let state = 'idle', err = '', cur = null;
+  /* estilo escuro (o "modo noturno" do próprio Google) */
+  const C = (f, e, c) => Object.assign({}, f ? {featureType: f} : {}, e ? {elementType: e} : {}, {stylers: [{color: c}]});
+  const NIGHT = [C('', 'geometry', '#242f3e'), C('', 'labels.text.stroke', '#242f3e'), C('', 'labels.text.fill', '#746855'),
+    C('administrative.locality', 'labels.text.fill', '#d59563'), C('poi', 'labels.text.fill', '#d59563'), C('poi.park', 'geometry', '#263c3f'),
+    C('poi.park', 'labels.text.fill', '#6b9a76'), C('road', 'geometry', '#38414e'), C('road', 'geometry.stroke', '#212a37'),
+    C('road', 'labels.text.fill', '#9ca5b3'), C('road.highway', 'geometry', '#746855'), C('road.highway', 'geometry.stroke', '#1f2835'),
+    C('road.highway', 'labels.text.fill', '#f3d19c'), C('transit', 'geometry', '#2f3948'), C('water', 'geometry', '#17263c'),
+    C('water', 'labels.text.fill', '#515c6d'), C('water', 'labels.text.stroke', '#17263c')];
+  /* só faz sentido quando há chave e a rota é pedida ao Google */
+  const want = () => { const t = Prefs.get().traf; return !!Goog.getKey() && !S.demo && !(t === 0 || t === '0' || t === false); };
+  async function open(dark){
+    const key = Goog.getKey(), tag = (dark ? 'd' : 'l') + ':' + key.slice(-8);
+    let store = {};
+    try{ store = JSON.parse(localStorage.getItem(KEY)) || {}; }catch(_){ /* sem armazenamento */ }
+    const c = store[tag];
+    if(c && c.token && c.exp > Date.now() / 1000 + 6 * 3600) return {token: c.token, exp: c.exp, dark};
+    const res = await fetch(`${API.gtiles}/v1/createSession?key=${encodeURIComponent(key)}`, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({mapType: 'roadmap', language: 'pt-BR', region: 'BR', scale: 'scaleFactor2x', highDpi: true}, dark ? {styles: NIGHT} : {}))});
+    let j = null;
+    try{ j = await res.json(); }catch(_){ /* corpo vazio */ }
+    if(!res.ok || !j || !j.session) throw new Error((j && j.error && j.error.message) || 'HTTP ' + res.status);
+    const exp = +j.expiry || (Date.now() / 1000 + 86400);
+    store[tag] = {token: j.session, exp};
+    try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(_){ /* sem armazenamento */ }
+    return {token: j.session, exp, dark};
+  }
+  /* o estilo de mapa para o MapLibre, com as imagens do Google; null quando não deu (aí vale o OpenStreetMap) */
+  async function style(dark){
+    if(!want()){ state = 'off'; cur = null; return null; }
+    try{
+      cur = await open(dark); state = 'ok'; err = '';
+      const q = `session=${encodeURIComponent(cur.token)}&key=${encodeURIComponent(Goog.getKey())}`;
+      return {version: 8, sources: {gmap: {type: 'raster', tiles: [`${API.gtiles}/v1/2dtiles/{z}/{x}/{y}?${q}`], tileSize: 256, maxzoom: 22}},
+        layers: [{id: 'gmap', type: 'raster', source: 'gmap'}]};
+    }catch(e){ state = 'err'; err = (e && e.message) || 'sem resposta'; cur = null; return null; }
+  }
+  /* o texto de direitos autorais para a área do mapa à vista */
+  async function copyright(b, zoom){
+    if(state !== 'ok' || !cur) return '';
+    try{
+      const u = `${API.gtiles}/tile/v1/viewport?session=${encodeURIComponent(cur.token)}&key=${encodeURIComponent(Goog.getKey())}&zoom=${Math.round(zoom)}` +
+        `&north=${b.getNorth().toFixed(4)}&south=${b.getSouth().toFixed(4)}&east=${b.getEast().toFixed(4)}&west=${b.getWest().toFixed(4)}`;
+      const j = await getJSON(u, {timeout: 10000});
+      return (j && j.copyright) || '';
+    }catch(_){ return ''; }
+  }
+  return {want, style, copyright, ok: () => state === 'ok', failed: () => state === 'err', err: () => err};
 })();
 
 /* ================= rota e trânsito: o caminho calculado pelo Google (Routes API) =================
@@ -129,7 +212,8 @@ const Traf = (() => {
   const usage = m => { try{ const u = JSON.parse(localStorage.getItem(UKEY[m])); return u && u.m === month() ? (u.n || 0) : 0; }catch(_){ return 0; } };
   const spend = m => { try{ localStorage.setItem(UKEY[m], JSON.stringify({m: month(), n: usage(m) + 1})); }catch(_){ /* sem armazenamento */ } };
   /* 2 (padrão quando há chave): rota do Google com o tempo e a intensidade do trânsito por trecho; 1: só o tempo; 0: rota do OpenStreetMap */
-  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
+  /* sem o mapa do Google no fundo, a rota do Google não pode ser usada: vale a do OpenStreetMap */
+  const mode = () => { if(!Goog.getKey() || GMap.failed()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
   const sec = v => parseFloat(String(v));
   const CODE = {NORMAL: 0, SLOW: 1, TRAFFIC_JAM: 2};
   /* quanto cada situação alonga o tempo do trecho em relação ao trânsito livre. É uma suposição do app para repartir

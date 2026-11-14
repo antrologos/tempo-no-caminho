@@ -642,3 +642,37 @@ body.drafting #layers{display:none}
 @media (max-width:899px){ .layout[data-sheet="peek"] .alts-key{display:none} }
 .mk-handle{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 6px rgba(0,0,0,.55);pointer-events:none}
 .mk-pass{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 5px rgba(0,0,0,.45);cursor:pointer}
+
+/* ---------- previsão toda do Google: os modelos saem da tela (versão 4.2) ---------- */
+.g-only #models,.g-only #conf-retro,.g-only #conf-toggle{display:none}
+
+/* ---------- painel "Mapa", botão de centralizar e mapa do Google (versão 4.2) ---------- */
+.livemini{display:none}
+.mapbtn{position:absolute;z-index:5;right:10px;width:44px;height:44px;display:grid;place-items:center;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 9px rgba(0,0,0,.32)}
+.mapbtn .ic{width:23px;height:23px}
+.mapbtn[aria-pressed="true"]{color:#1B6FE8}
+.glogo{position:absolute;z-index:4;left:10px;bottom:8px;display:flex;align-items:center;gap:8px;pointer-events:none;font-size:11px;color:var(--ink);text-shadow:0 0 3px var(--surface),0 0 3px var(--surface)}
+.glogo[hidden]{display:none}
+.glogo img{display:block;height:22px;width:auto}
+@media (min-width:900px){ #recenter{bottom:108px} }
+@media (max-width:899px){
+  #recenter{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 62px)}
+  .glogo{bottom:auto;top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 62px)}
+  .sheetbar button{font-size:13.5px;padding-left:2px;padding-right:2px}
+  .layout[data-sheet="mini"] > :not(.sheetbar):not(.livemini){display:none}
+  .layout[data-sheet="mini"] .livemini{display:block;margin:0 0 2px;font-size:14.5px;line-height:1.35}
+  .layout[data-sheet="mini"] .livemini[hidden]{display:none}
+  .livemini .lm-alert{display:block;margin-top:7px;padding:7px 10px;border-radius:10px;background:var(--yellow);color:#151A20;font-weight:700}
+}
+
+/* ---------- enquadrar a rota, legenda da chuva, aviso de versão nova (versão 4.2) ---------- */
+@media (min-width:900px){ #fitall{bottom:160px} }
+@media (max-width:899px){
+  #fitall{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 114px)}
+  .layer-key{max-width:calc(100% - 58px)}
+}
+.layer-key .lk-note{color:var(--muted)}
+body.has-upd .menubtn{position:relative}
+body.has-upd .menubtn::after{content:"";position:absolute;top:7px;right:7px;width:10px;height:10px;border-radius:50%;background:#E5484D;border:2px solid var(--surface)}
+
+.livemini .lm-stop{float:right;margin:0 0 4px 10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13.5px;font-weight:700}

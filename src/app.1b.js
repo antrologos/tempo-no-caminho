@@ -128,6 +128,10 @@ function expandDet(d, map){
   return {t0: d.t0, n: d.n, data};
 }
 
+/* quando a previsão vem toda do Google, os modelos não são consultados: fica este conjunto vazio no lugar */
+const emptyWx = () => ({models: {}, list: [], failed: [], beyond: [], extra: {list: [], data: {}}, lag: {data: {}, n: 0},
+  ens: {list: [], data: {}, total: 0}, cells: 0, cost: 0, detPts: 0, span: [0, 0], none: true});
+
 async function loadWeather(samples, dep, routeDur){
   const day0 = startOfDay(dep);
   /* pede o dia da saída e mais dois: mudar a data ou a hora dentro dessa janela não gasta nova consulta */
@@ -359,13 +363,25 @@ function computeTrip(dep){
     }
     const n = ps.length;
     const med = n ? median(ps) : null, max = n ? Math.max(...ps) : null, min = n ? Math.min(...ps) : null;
-    const temp = temps.length ? median(temps) : null, cape = capes.length ? median(capes) : null;
+    let temp = temps.length ? median(temps) : null;
+    const cape = capes.length ? median(capes) : null;
     const ens = ensAt(i, t);
 
     const popApp = ens ? ens.pop : (n ? wetHR.length / n : null);
     /* a chance mostrada: a do Google, onde ele alcança; senão, a do conjunto de modelos */
     const gq = useG ? Goog.at(i, t) : null;
     const pop = gq ? gq.pop : popApp;
+    /* o que os modelos não trouxeram (ou quando só o Google entra) vem do Google: temperatura, rajada, visibilidade, dia ou noite, trovoada */
+    if(gq){
+      if(temp == null && gq.temp != null) temp = gq.temp;
+      if(gust == null && gq.gust != null) gust = gq.gust;
+      if(vis == null && gq.vis != null) vis = gq.vis;
+      if(night == null && gq.day != null) night = gq.day === false;
+      if(!n){
+        if((gq.th != null && gq.th >= 40) || /THUNDER/.test(gq.type || '')) thunder++;
+        if(gq.vis != null && gq.vis < 1000) fog++;
+      }
+    }
     let klass = klassOf(pop);
     let amt = ens ? ens.wetMed : (wetHR.length ? median(wetHR) : null);
     /* o Google vê chuva e o conjunto não tem volume para dar: usa o volume esperado pelo Google, dividido pela chance */
@@ -381,6 +397,8 @@ function computeTrip(dep){
     if(klass >= 1){
       if(sumP > 0){ const fc = sumS / sumP; regime = fc >= 0.6 ? 'pancada' : fc <= 0.3 ? 'continua' : 'mista'; }
       else if(cape != null && cape >= 800) regime = 'pancada';
+      /* sem os modelos, o tipo de chuva vem da descrição do Google: pancadas e trovoadas são chuva isolada */
+      if(!regime && gq && gq.type) regime = /SHOWER|THUNDER/.test(gq.type) ? 'pancada' : /RAIN/.test(gq.type) ? 'continua' : null;
     }
 
     return {
@@ -389,7 +407,7 @@ function computeTrip(dep){
       thunder: thunder > 0, fog: fog > 0,
       wind: gust != null && gust >= md.gust,
       heat: md.heat != null && temp != null && temp >= md.heat,
-      ens, pop, popApp, src: gq ? 'g' : 'app', klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
+      ens, pop, popApp, src: gq ? 'g' : 'app', gqpf: gq ? gq.qpf : null, klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
       regime, shower: regime === 'pancada' && klass >= 2
     };
   });
@@ -434,7 +452,11 @@ function computeTrip(dep){
 
 /* janela de risco num ponto fixo: as horas em volta da passagem em que a chance fica em 30% ou mais */
 function riskWindow(i, t){
-  const at = dh => { const e = ensAt(i, t + dh * HOUR); return e ? e.pop : null; };
+  const at = dh => {
+    const g = primGoogle() ? Goog.at(i, t + dh * HOUR) : null;
+    if(g) return g.pop;
+    const e = ensAt(i, t + dh * HOUR); return e ? e.pop : null;
+  };
   const p0 = at(0);
   if(p0 == null || p0 < 0.3) return null;
   let a = 0, b = 0;

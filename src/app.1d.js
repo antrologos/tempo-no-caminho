@@ -333,20 +333,21 @@ const Conf = (() => {
 
   function stats(){
     const st = load(), bins = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    let n = 0, trips = 0, wet = 0, bN = 0, nS = 0, bS = 0, bNs = 0, nD = 0, bD = 0, bNd = 0, nR = 0, bR = 0, bNr = 0, nG = 0, bG = 0, bNg = 0, wG = 0;
-    const LG = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];      /* por antecedência: trechos, erro do Google, erro dos modelos, chuvas */
+    let n = 0, trips = 0, wet = 0, bN = 0, nS = 0, bS = 0, bNs = 0, nD = 0, bD = 0, bNd = 0, nR = 0, bR = 0, bNr = 0, nG = 0, bG = 0, bNg = 0, wG = 0, nGm = 0;
+    const LG = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];      /* por antecedência: trechos, erro do Google, erro dos modelos, chuvas */
     for(const r of st.recs){
       if(!r.v) continue;
       trips++;
       r.rows.forEach((row, k) => {
-        const o = r.v[k], p = row[3], m = row[9] != null ? row[9] : row[3], lead = (row[2] - r.made) / 60;      /* m: a chance do conjunto de modelos; lead: horas entre a consulta e a passagem */
+        const o = r.v[k], p = row[3], m = row.length > 9 ? row[9] : row[3], lead = (row[2] - r.made) / 60;      /* m: a chance do conjunto de modelos; lead: horas entre a consulta e a passagem */
         n++; wet += o; bN += (p - o) ** 2;
         if(row[4] != null){ nS++; bS += (row[4] - o) ** 2; bNs += (p - o) ** 2; }
         if(row[5] != null){ nD++; bD += (row[5] - o) ** 2; bNd += (p - o) ** 2; }
         if(row[7] && row[6] != null){ nR++; bR += (row[6] - o) ** 2; bNr += (p - o) ** 2; }
         if(row[8] != null){
-          nG++; bG += (row[8] - o) ** 2; bNg += (m - o) ** 2; wG += o;
-          const q = LG[lead < 6 ? 0 : lead < 24 ? 1 : 2]; q[0]++; q[1] += (row[8] - o) ** 2; q[2] += (m - o) ** 2; q[3] += o;
+          nG++; bG += (row[8] - o) ** 2; wG += o;
+          const q = LG[lead < 6 ? 0 : lead < 24 ? 1 : 2]; q[0]++; q[1] += (row[8] - o) ** 2; q[3] += o;
+          if(m != null){ nGm++; bNg += (m - o) ** 2; q[4]++; q[2] += (m - o) ** 2; }
         }
         const b = bins[p < 0.3 ? 0 : p < 0.6 ? 1 : 2]; b[0]++; b[1] += p; b[2] += o;
       });
@@ -354,7 +355,7 @@ const Conf = (() => {
     const left = st.recs.filter(r => !r.v);
     return {n, trips, pending: left.length, next: left.length ? Math.min(...left.map(readyAt)) : null, base: n ? wet / n : null, bsNew: n ? bN / n : null,
       sim: nS ? {n: nS, bs: bS / nS, bsNew: bNs / nS} : null, det: nD ? {n: nD, bs: bD / nD, bsNew: bNd / nD} : null,
-      raw: nR ? {n: nR, bs: bR / nR, bsNew: bNr / nR} : null, goog: nG ? {n: nG, bs: bG / nG, bsNew: bNg / nG, base: wG / nG} : null, lead: LG, bins};
+      raw: nR ? {n: nR, bs: bR / nR, bsNew: bNr / nR} : null, goog: nG ? {n: nG, bs: bG / nG, nM: nGm, bsNew: nGm ? bNg / nGm : null, base: wG / nG} : null, lead: LG, bins};
   }
 
   const f3 = v => v == null ? 'sem dado' : nf(v, 3);
@@ -366,11 +367,12 @@ const Conf = (() => {
       A.push(['O que o app mostrou', s.sim ? s.sim.bsNew : s.bsNew]);
       if(s.base != null){ A.push(['Referência: prever sempre a frequência observada', s.base * (1 - s.base)]); A.push(['Referência: prever que nunca chove', s.base]); }
       if(s.goog){
-        A.push([`Google, em ${s.goog.n} trechos`, s.goog.bs]); A.push(['O conjunto de modelos, nesses mesmos trechos', s.goog.bsNew]);
+        A.push([`Google, em ${s.goog.n} trechos`, s.goog.bs]);
+        if(s.goog.nM) A.push([s.goog.nM === s.goog.n ? 'O conjunto de modelos, nesses mesmos trechos' : `O conjunto de modelos, em ${s.goog.nM} desses trechos`, s.goog.bsNew]);
         A.push(['Referência nesses trechos: a frequência observada', s.goog.base * (1 - s.goog.base)]);
         ['até 6 h de antecedência', 'de 6 a 24 h de antecedência', 'mais de 24 h de antecedência'].forEach((lab, q) => {
           const g = s.lead[q];
-          if(g[0]){ A.push([`Google, ${lab} (${g[0]} trechos; choveu em ${pct(g[3] / g[0])})`, g[1] / g[0]]); A.push([`Modelos, ${lab}`, g[2] / g[0]]); }
+          if(g[0]){ A.push([`Google, ${lab} (${g[0]} trechos; choveu em ${pct(g[3] / g[0])})`, g[1] / g[0]]); if(g[4]) A.push([`Modelos, ${lab}`, g[2] / g[4]]); }
         });
       }
       if(s.raw) A.push(['A mesma previsão, sem o ajuste', s.raw.bs]);

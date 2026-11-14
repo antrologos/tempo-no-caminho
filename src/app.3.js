@@ -4,7 +4,7 @@ const mqMobile = matchMedia('(max-width: 899px)');
 const isMobile = () => mqMobile.matches;
 
 const MapCtl = (() => {
-  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], altMk = [], picking = null, draft = null, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
+  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], altMk = [], picking = null, draft = null, gBase = false, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
   const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   /* a rota é sempre uma linha contínua, em cima da estrada. A cor é a força da chuva; quanto menor a chance,
      mais a cor se apaga, até o cinza de "seco" */
@@ -44,7 +44,7 @@ const MapCtl = (() => {
   };
   /* área livre do mapa: no celular, entre a barra de viagem e o painel */
   function pad(){
-    const chips = $('#layers').hidden ? 0 : 46 + ($('#layer-key').innerHTML ? 28 : 0);
+    const chips = $('#layers').hidden ? 0 : 46 + (($('#layer-key').offsetHeight || 0) ? $('#layer-key').offsetHeight + 6 : 0);
     if(!isMobile()) return {top: 40 + chips, right: 44, bottom: 46, left: 44};
     const vh = window.innerHeight, plan = $('#plan'), lay = $('#layout');
     const top = (plan.classList.contains('is-min') ? Math.min(plan.getBoundingClientRect().bottom, vh * 0.25) : 70) + ($('#banner').hidden ? 18 : 56) + chips;
@@ -176,6 +176,25 @@ const MapCtl = (() => {
     mk.you.setLngLat([s.lon, s.lat]).addTo(gl);
     mk.you.getElement().style.zIndex = '3';
   }
+  /* a pessoa aproximou ou moveu o mapa, e o caminho novo passa pela área à vista: o enquadramento fica como está.
+     Assim dá para fazer vários ajustes seguidos no mesmo ponto sem ter de voltar a ele. */
+  function holds(R){
+    if(!userMoved || !glReady || !R) return false;
+    try{
+      const b = gl.getBounds(), c = R.coords, step = Math.max(1, Math.floor(c.length / 500));
+      for(let i = 0; i < c.length; i += step) if(b.contains(c[i])) return true;
+    }catch(_){ /* sem mapa pronto */ }
+    return false;
+  }
+  /* no celular, o logotipo do Google fica logo abaixo das camadas e da legenda */
+  function placeCredit(){
+    const box = $('#glogo');
+    if(!box || box.hidden) return;
+    if(!isMobile()){ box.style.top = ''; return; }
+    const base = box.parentElement.getBoundingClientRect(), lay = $('#layers'), plan = $('#plan');
+    const y = (!lay.hidden ? lay.getBoundingClientRect().bottom : plan.classList.contains('is-min') ? plan.getBoundingClientRect().bottom : 70) - base.top + 8;
+    box.style.top = Math.round(y) + 'px';
+  }
   function fitGL(animate = true){
     const R = draft ? draft.alts[draft.i].route : S.route;
     if(!glReady || !R) { needFit = true; return; }
@@ -186,10 +205,27 @@ const MapCtl = (() => {
     try{ gl.fitBounds([[x0, y0], [x1, y1]], {padding: pad(), maxZoom: 14, duration: (animate && !reduceMotion()) ? 600 : 0}); }
     catch(_){ gl.fitBounds([[x0, y0], [x1, y1]], {padding: 30, maxZoom: 14, duration: 0}); }
   }
+  /* o fundo do mapa: o do Google, quando a rota é pedida a ele e a Map Tiles API está liberada; senão, o do OpenStreetMap */
+  async function baseStyle(){
+    const g = await GMap.style(isDark());
+    gBase = !!g;
+    return g || API.style[isDark() ? 'dark' : 'light'];
+  }
+  /* logotipo e direitos do Google sobre o mapa dele, como os termos pedem */
+  function gCredit(){
+    const box = $('#glogo'), img = $('#glogo-img');
+    box.hidden = !gBase;
+    if(!gBase) return;
+    placeCredit();
+    if(!img.getAttribute('src')){ img.onerror = () => { img.remove(); $('#glogo-text').textContent = 'Google  ' + $('#glogo-text').textContent; }; img.src = 'https://maps.gstatic.com/mapfiles/api-3/images/google_gray.svg'; }
+    clearTimeout(gCredit.t);
+    gCredit.t = setTimeout(async () => { const c = await GMap.copyright(gl.getBounds(), gl.getZoom()); if(c) $('#glogo-text').textContent = c; }, 1200);
+  }
   async function initGL(){
     await loadLib();
+    const st0 = await baseStyle();
     gl = new maplibregl.Map({
-      container: el, style: API.style[isDark() ? 'dark' : 'light'], center: [-49, -15], zoom: 2.7,
+      container: el, style: st0, center: [-49, -15], zoom: 2.7,
       attributionControl: false, cooperativeGestures: !isMobile(), dragRotate: false, pitchWithRotate: false, touchPitch: false,
       locale: {
         'CooperativeGesturesHandler.WindowsHelpText': 'Use Ctrl + rolagem para dar zoom no mapa',
@@ -209,12 +245,14 @@ const MapCtl = (() => {
       if(a && el.clientWidth < 560){ a.removeAttribute('open'); a.classList.remove('maplibregl-compact-show'); }
     });
     gl.on('style.load', () => {
-      glReady = true; clearTimeout(styleTimer);
+      glReady = true; clearTimeout(styleTimer); gCredit();
       ensureLayers(); pushGL(); markersGL();
       if(needFit) fitGL();
     });
     gl.on('click', e => {
+      const menuOpen = !$('#mapmenu').hidden;
       hideMenu();
+      if(menuOpen && !picking) return;                      /* com o menu aberto, um toque em qualquer ponto só o fecha */
       if(picking){ const cb = picking; picking = null; cb({lat: e.lngLat.lat, lon: e.lngLat.lng}); return; }
       /* toque numa rota alternativa (em cinza), longe da rota atual: passa a usá-la */
       const box = [[e.point.x - 9, e.point.y - 9], [e.point.x + 9, e.point.y + 9]];
@@ -254,6 +292,8 @@ const MapCtl = (() => {
     });
     window.addEventListener('mouseup', () => { if(pull){ pull = null; gl.getCanvas().style.cursor = ''; if(mk.handle) mk.handle.remove(); } });
     /* tocar e segurar (ou botão direito) num ponto do mapa: partir dali, parar ali ou chegar ali */
+    /* mexer no mapa com o mouse (arrastar ou girar a roda) também fecha o menu */
+    ['dragstart', 'zoomstart'].forEach(t => gl.on(t, e => { const o = e && e.originalEvent; if(o && !('touches' in o) && o.pointerType !== 'touch') hideMenu(); }));
     gl.on('contextmenu', e => { if(e.originalEvent) e.originalEvent.preventDefault(); showMenu(e.lngLat, e.point); });
     let lp = null, lp0 = null;
     gl.on('touchstart', e => {
@@ -266,6 +306,7 @@ const MapCtl = (() => {
     ['touchend', 'touchcancel', 'zoomstart'].forEach(t => gl.on(t, () => clearTimeout(lp)));
     gl.on('movestart', hideMenu);
     gl.on('error', () => { /* falhas de tile não interrompem o app */ });
+    gl.on('moveend', gCredit);
     /* enquanto a pessoa não mexer no mapa, a rota continua enquadrada quando o tamanho muda */
     ['dragstart', 'zoomstart'].forEach(t => gl.on(t, e => { if(e && e.originalEvent) userMoved = true; }));
     if('ResizeObserver' in window) new ResizeObserver(() => {
@@ -364,19 +405,31 @@ const MapCtl = (() => {
       if(S.samples) this.setTrip();
     },
     /* a posição do aparelho no mapa; o mapa acompanha, a menos que a pessoa tenha mexido nele há pouco */
-    me(lon, lat){
+    /* force: centraliza já (botão de mira), mesmo que a pessoa tenha mexido no mapa há pouco */
+    me(lon, lat, force){
       if(kind !== 'gl' || !glReady) return;
-      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); }); }
+      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); $('#recenter').setAttribute('aria-pressed', 'false'); }); }
       mk.me.setLngLat([lon, lat]).addTo(gl);
-      if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
+      if(force){ mk.meTouch = 0; gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 13), duration: 700}); $('#recenter').setAttribute('aria-pressed', 'true'); }
+      else if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
     },
-    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
+    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } $('#recenter').setAttribute('aria-pressed', 'false'); },
+    /* volta a acompanhar a posição já marcada no mapa */
+    follow(){ if(kind !== 'gl' || !glReady || !mk.me) return false; const p = mk.me.getLngLat(); this.me(p.lng, p.lat, true); return true; },
+    _gl(){ return gl; },
+    /* botão de enquadrar: volta a mostrar a rota inteira */
+    fitAll(){ if(kind !== 'gl' || !(draft || S.route)) return; userMoved = false; fitGL(true); },
+    credit(){ placeCredit(); },                       /* para os testes */
+    say(t){ note(t); clearTimeout(this._sayT); this._sayT = setTimeout(() => note(''), 6000); },
+    /* troca o fundo do mapa (Google ou OpenStreetMap) quando a chave ou a escolha da rota muda */
+    async restyle(){ if(kind !== 'gl') return; const st = await baseStyle(); glReady = false; try{ gl.setStyle(st); }catch(_){ /* mantém o estilo atual */ } },
     /* modo de escolha: o próximo toque no mapa devolve o ponto */
     canPick(){ return kind === 'gl' && glReady; },
     /* só para os testes: onde um ponto do mapa aparece na tela */
     _px(lon, lat){ if(kind !== 'gl' || !glReady) return null; const q = gl.project([lon, lat]), b = el.getBoundingClientRect(); return {x: b.left + q.x, y: b.top + q.y}; },
     /* mostra um caminho traçado e ainda não confirmado (ou volta ao normal, com null) */
-    setDraft(d){ draft = d; if(kind !== 'gl' || !glReady) return; pushGL(); markersGL(); if(d){ userMoved = false; fitGL(true); } },
+    /* refit: consulta nova, enquadra o caminho inteiro; num ajuste, o mapa fica onde a pessoa deixou (ver holds) */
+    setDraft(d, refit){ draft = d; $('#fitall').hidden = !(d || S.route); if(kind !== 'gl' || !glReady) return; pushGL(); markersGL(); if(d && (refit || !holds(d.alts[d.i].route))){ userMoved = false; fitGL(true); } },
     pick(cb){ picking = cb; hideMenu(); },
     hideMenu,
     async goLive(){
@@ -385,9 +438,9 @@ const MapCtl = (() => {
       const fresh = old.cloneNode(false); old.replaceWith(fresh); el = fresh; note('');
       try{ await initGL(); }catch(_){ initSketch('Sem mapa de fundo neste navegador'); }
     },
-    setTrip(){
-      userMoved = false;
-      if(kind === 'gl'){ pushGL(); if(glReady) markersGL(); requestAnimationFrame(() => fitGL(true)); }
+    setTrip(refit){
+      $('#fitall').hidden = !S.route;
+      if(kind === 'gl'){ pushGL(); if(glReady) markersGL(); if(refit || !holds(S.route)){ userMoved = false; requestAnimationFrame(() => fitGL(true)); } }
       else if(kind === 'sketch') drawSketch();
     },
     paint(){
@@ -415,7 +468,7 @@ const MapCtl = (() => {
       } else if(kind === 'sketch') drawSketch();
     },
     theme(){
-      if(kind === 'gl'){ glReady = false; try{ gl.setStyle(API.style[isDark() ? 'dark' : 'light']); }catch(_){ /* mantém o estilo atual */ } }
+      if(kind === 'gl') this.restyle();
       else if(kind === 'sketch') drawSketch();
     }
   };
@@ -616,7 +669,7 @@ function setDeparture(ms){
 }
 
 /* ---------- modo app: barra de viagem no alto e painel embaixo ---------- */
-const SHEETS = ['peek', 'half', 'full'];
+const SHEETS = ['mini', 'peek', 'half', 'full'];        /* mini: só o mapa, com uma linha de estado */
 function syncChrome(){
   if(els.plan.classList.contains('is-min')) document.documentElement.style.setProperty('--pill-h', Math.round(els.plan.getBoundingClientRect().height) + 'px');
   MapCtl.refit(false);
@@ -641,7 +694,7 @@ function setSheet(s){
   els.layout.dataset.sheet = s;
   $$('#sheetbar button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sheet === s)));
   if(s !== 'full') els.layout.scrollTop = 0;
-  requestAnimationFrame(() => { if(S.trip && s !== 'peek'){ renderRuler(); renderModels(); renderDepart(); } MapCtl.refit(true); });
+  requestAnimationFrame(() => { if(S.trip && s !== 'peek' && s !== 'mini'){ renderRuler(); renderModels(); renderDepart(); } if(!Live.on()) MapCtl.refit(true); });
 }
 /* leva o cursor a um ponto do trajeto e, no celular, abre o gráfico junto do mapa */
 /* computador: as abas do painel da direita */
@@ -1061,7 +1114,7 @@ async function plan(opts = {}){
     if(opts.auto || opts.live || opts.preferDist != null){
       await adopt(alts, i0, {from, to, vias, pins, profile, keep: opts.keep, live: opts.live});
       writeHash();
-    } else showDraft({from, to, vias, pins, profile, alts, i: i0});
+    } else showDraft({from, to, vias, pins, profile, alts, i: i0}, opts.keep);
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
@@ -1075,10 +1128,19 @@ async function adopt(alts, i, ctx){
   const alt = alts[i], route = alt.route;
   const samples = sampleRoute(route);
   if(route.google) route.scat = Traf.sampleCats(route, samples);
-  setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
-  const dep = readDepart();
-  const wx = await loadWeather(samples, dep, route.dur);
-  Object.assign(S, {from: ctx.from, to: ctx.to, vias: ctx.vias || [], routeMode: ctx.profile, alts, alt: i,
+  const dep = readDepart(), kk = 1 + S.slack;
+  /* com o Google como fonte, a previsão vem toda dele; os modelos só são consultados se ele não cobrir a viagem
+     (sem chave, além de 7 dias ou fora do ar) */
+  let G = null, gErr = '', gOnly = false, wx;
+  if(primGoogle()){
+    setBusy(true, 'Buscando a previsão do Google…');
+    try{ G = await Goog.build({samples, dep, arr: dep + route.dur * 1000 * kk, rid: 0}); }
+    catch(e){ gErr = (e && e.message) || 'sem resposta'; }
+    gOnly = Goog.covers(G, samples, dep, kk);
+  }
+  if(gOnly) wx = emptyWx();
+  else { setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…'); wx = await loadWeather(samples, dep, route.dur); }
+  Object.assign(S, {from: ctx.from, to: ctx.to, vias: ctx.vias || [], routeMode: ctx.profile, alts, alt: i, gOnly,
     route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000});
   S.extra = {relief: null, road: false};
   /* onde fica cada parada ao longo do caminho; e, numa rota que não é a recomendada, dois pontos de passagem
@@ -1087,15 +1149,10 @@ async function adopt(alts, i, ctx){
   S.pins = (ctx.pins || []).map(p => Object.assign({}, p, {d: snapDist(route, p)}));
   route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
-  /* com o Google como fonte principal, espera a previsão dele antes de mostrar o resultado, para os números não mudarem na tela */
-  if(primGoogle()){
-    S.departMs = readDepart(); S.trip = computeTrip(S.departMs);
-    setBusy(true, 'Buscando a previsão do Google…');
-    try{ await Goog.load(); }catch(e){ S.goog = {routeId: id, error: (e && e.message) || 'sem resposta'}; }
-  }
+  if(G){ G.routeId = id; S.goog = G; } else if(gErr) S.goog = {routeId: id, error: gErr};
   endDraft();
   recompute({focusWorst: true});
-  MapCtl.setTrip();
+  MapCtl.setTrip(!(ctx.keep || ctx.hold));
   if(!ctx.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
   if(ctx.live) Live.rebase();
   namePlaces(id);
@@ -1132,12 +1189,13 @@ function renderDraft(){
     (R.gErr ? ` O Google não calculou a rota (${R.gErr}); este caminho é o do OpenStreetMap.` : '');
   $('#draft-cancel').hidden = !S.trip;
 }
-function showDraft(d){
+function showDraft(d, keep){
+  d.edit = !!keep;                 /* caminho vindo de um ajuste (e não de uma consulta nova): o mapa fica onde está, também ao confirmar */
   S.draft = d;
   els.layout.classList.add('drafting'); document.body.classList.add('drafting');
   if(isMobile()) setSheet('peek'); else setTab('resumo');
   renderDraft();
-  MapCtl.setDraft(d);
+  MapCtl.setDraft(d, !keep);
   minPlan(true);
 }
 function selectDraft(i){
@@ -1153,7 +1211,7 @@ async function confirmDraft(){
   hideError();
   let ok = false;
   setBusy(true, 'Buscando a previsão…');
-  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, pins: d.pins, profile: d.profile}); writeHash(); ok = true; }
+  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, pins: d.pins, profile: d.profile, hold: d.edit}); writeHash(); ok = true; }
   catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
 }
@@ -1288,13 +1346,15 @@ async function googRefresh(){
   }
   window.dispatchEvent(new Event('tnc-goog'));
   if(!S.trip) return;
+  /* só o Google estava em uso e ele não alcança mais a viagem: entram os modelos */
+  if(S.gOnly && !Goog.covers(S.goog && S.goog.routeId === id ? S.goog : null, S.samples, S.departMs, 1 + S.slack)){ await needModels(); return; }
   if(primGoogle()) recompute();       /* a chance mostrada depende do Google: refaz as contas, não só os desenhos */
   else { renderVerdict(); renderReadout(); renderRuler(); renderLegend(); renderList(); }
   Conf.record(S.trip);
 }
 
 /* a previsão carregada serve para o horário escolhido? (a consulta traz o dia da saída e mais dois) */
-const wxOk = () => !!S.wx && (startOfDay(readDepart()) === S.wxDay || (!S.demo && wxCovers(S.wx, readDepart(), S.route.dur)));
+const wxOk = () => !!S.wx && (S.gOnly || startOfDay(readDepart()) === S.wxDay || (!S.demo && wxCovers(S.wx, readDepart(), S.route.dur)));
 
 async function applyWhen(){
   if(!S.route) return;
@@ -1323,8 +1383,23 @@ async function applyWhen(){
 }
 
 /* acompanhamento: busca de novo os modelos e as simulações para os mesmos trechos, sem mexer na tela */
+/* o Google deixou de cobrir a viagem (a data mudou para além de 7 dias, por exemplo), ou a pessoa pediu a chance
+   dos modelos: busca os modelos, que estavam dispensados */
+async function needModels(){
+  if(!S.gOnly || S.busy || S.demo || !S.route) return;
+  const id = S.routeId, dep = readDepart();
+  setBusy(true, 'Buscando a previsão dos modelos…');
+  try{
+    const wx = await loadWeather(S.samples, dep, S.route.dur);
+    if(id !== S.routeId) return;
+    S.wx = wx; S.wxDay = startOfDay(dep); S.wxAt = Date.now(); S.gOnly = false;
+    recompute();
+  }catch(e){ showError(e); }
+  finally{ setBusy(false); }
+}
+
 async function refreshWeather(){
-  if(S.busy || S.demo || !S.route) return false;
+  if(S.busy || S.demo || !S.route || S.gOnly) return false;
   const id = S.routeId, dep = readDepart();
   const wx = await loadWeather(S.samples, dep, S.route.dur);
   if(id !== S.routeId) return false;
@@ -1440,7 +1515,7 @@ function initUI(){
   bar.addEventListener('pointerup', e => {
     if(gy == null) return;
     const dy = e.clientY - gy; gy = null;
-    if(Math.abs(dy) >= 28){ swiped = true; setSheet(SHEETS[clamp(SHEETS.indexOf(S.sheet) + (dy < 0 ? 1 : -1), 0, 2)]); }
+    if(Math.abs(dy) >= 28){ swiped = true; setSheet(SHEETS[clamp(SHEETS.indexOf(S.sheet) + (dy < 0 ? 1 : -1), 0, SHEETS.length - 1)]); }
   });
   bar.addEventListener('pointercancel', () => { gy = null; });
   bar.addEventListener('click', e => {
@@ -1476,6 +1551,33 @@ function initUI(){
   $('#alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) useAlt(+b.dataset.i); });
   $('#mapmenu').addEventListener('click', e => { const b = e.target.closest('button[data-act]'), m = $('#mapmenu'); if(!b) return; m.hidden = true; if(b.dataset.act === 'via') passAt(+m.dataset.lat, +m.dataset.lon); else if(b.dataset.act !== 'close') pickPoint(b.dataset.act, +m.dataset.lat, +m.dataset.lon); });
   $('#pick-cancel').addEventListener('click', endPick);
+  $('#fitall').addEventListener('click', () => MapCtl.fitAll());
+  /* com o painel recolhido, o acompanhamento pode ser encerrado ali mesmo */
+  $('#live-mini').addEventListener('click', e => { if(e.target.closest('#lm-stop')) Live.stop(); });
+  /* o menu do mapa some com um toque fora dele (na página ou no mapa) e com a tecla Esc */
+  document.addEventListener('pointerdown', e => { if(!e.target.closest('#mapmenu') && !e.target.closest('#map')) MapCtl.hideMenu(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') MapCtl.hideMenu(); });
+  /* versão e atualização */
+  $('#upd-ver').textContent = APP_VERSION || '?';
+  $('#upd-btn').addEventListener('click', async e => {
+    const st = $('#upd-status'), b = e.currentTarget;
+    if(b.dataset.ready){ st.textContent = 'Atualizando…'; Updater.apply(); return; }
+    b.disabled = true; st.textContent = 'Procurando…';
+    try{
+      const r = await Updater.check();
+      if(r.has){ st.textContent = `Há uma versão nova (${r.latest}). Atualizando…`; Updater.apply(); }
+      else st.textContent = `Este aparelho já está na versão mais recente (${APP_VERSION}).`;
+    }catch(err){ st.textContent = `Não consegui conferir agora (${(err && err.message) || 'sem resposta'}).`; }
+    b.disabled = false;
+  });
+  setTimeout(() => Updater.auto(), 5000);
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') Updater.auto(); });
+  /* botão de mira: volta o mapa para a posição da pessoa (e, no acompanhamento, retoma o seguir) */
+  $('#recenter').addEventListener('click', async () => {
+    if(MapCtl.follow()) return;
+    try{ const f = await locateNow(0); MapCtl.me(f.lon, f.lat, true); }
+    catch(e){ MapCtl.say((e && e.message) || 'Não consegui obter a sua localização agora.'); }
+  });
   $('#draft-go').addEventListener('click', confirmDraft);
   $('#draft-cancel').addEventListener('click', cancelDraft);
   $('#draft-alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) selectDraft(+b.dataset.i); });
@@ -1495,6 +1597,7 @@ function initUI(){
     if(!S.trip || S.demo || !S.wx){ el.textContent = ''; return; }
     const g = S.goog && S.goog.calls != null && S.goog.routeId === S.routeId ? ` Google: ${nf(S.goog.calls)} chamadas em ${S.goog.idx.length} pontos.` : '';
     const relief = S.extra && S.extra.relief ? S.extra.relief.pts.length : 0;
+    if(S.gOnly){ el.textContent = `Esta consulta tem ${S.samples.length} trechos. A previsão veio toda do Google${S.goog && S.goog.calls != null && S.goog.routeId === S.routeId ? `: ${nf(S.goog.calls)} chamadas em ${S.goog.idx.length} pontos` : ''}. Do Open-Meteo, só a altitude do caminho (cerca de ${nf(relief)} no limite gratuito de 10.000 por dia).`; return; }
     el.textContent = `Esta consulta tem ${S.samples.length} trechos. Open-Meteo: 7 pedidos, que valem cerca de ${nf((S.wx.cost || 0) + relief)} no limite gratuito de 10.000 por dia (os modelos detalhados em ${S.wx.detPts || S.samples.length} pontos, as simulações em ${S.wx.cells} células).${g}`;
   };
   $('#pref-step').value = String(Prefs.get().step);
@@ -1502,12 +1605,13 @@ function initUI(){
   $('#pref-step').addEventListener('change', e => { Prefs.set({step: +e.target.value}); if(S.route && !S.demo) plan({keep: true, auto: !S.draft}); });
   $('#pref-guse').addEventListener('change', e => { Prefs.set({guse: e.target.value}); S.goog = null; gkRefresh(); googRefresh(); });
   $('#pref-prim').value = Prefs.get().prim === 'app' ? 'app' : 'g';
-  $('#pref-prim').addEventListener('change', e => { Prefs.set({prim: e.target.value}); if(S.trip && !S.demo){ recompute(); googRefresh(); } });
+  $('#pref-prim').addEventListener('change', e => { Prefs.set({prim: e.target.value}); if(!S.trip || S.demo) return; if(e.target.value === 'app' && S.gOnly) needModels(); else { recompute(); googRefresh(); } });
   { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2); }
-  $('#pref-traf').addEventListener('change', e => { Prefs.set({traf: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
+  $('#pref-traf').addEventListener('change', async e => { Prefs.set({traf: +e.target.value}); await MapCtl.restyle(); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
   /* estado do trânsito, logo abaixo da escolha */
   window.addEventListener('tnc-goog', () => {
     const el = $('#gtraf-status'), R = S.route, md = Traf.mode();
+    if(Goog.getKey() && GMap.failed()){ el.textContent = `O mapa do Google não abriu (${GMap.err()}). O Google exige que a rota dele apareça sobre o mapa dele; por isso, por enquanto, o app usa o mapa e a rota do OpenStreetMap, sem trânsito. Para liberar: no Google Cloud, ative a “Map Tiles API” no mesmo projeto e inclua essa API nas restrições da chave.`; return; }
     if(!Goog.getKey()){ el.textContent = 'Sem chave do Google neste navegador: a rota é a do OpenStreetMap, sem trânsito.'; return; }
     if(!md){ el.textContent = 'Você escolheu a rota do OpenStreetMap, sem trânsito.'; return; }
     const sku = R && R.google ? R.sku : md, nUso = Traf.usage(sku);
@@ -1530,13 +1634,15 @@ function initUI(){
       await Goog.test();
       st.textContent = `Chave aceita: o Google respondeu. A chave não tem prazo. A linha dele aparece no gráfico de chance quando a viagem acontece nos próximos ${Goog.DAYS} dias.`;
       S.goog = null;
+      await MapCtl.restyle();
       if(S.route && !S.demo && Traf.mode() && !S.route.google) plan({keep: true}); else await googRefresh();
     }catch(e){ st.textContent = `O Google recusou ou não respondeu (${(e && e.message) || 'sem resposta'}). Confira se a chave foi copiada inteira.`; }
   });
   $('#gkey-clear').addEventListener('click', () => {
     Goog.setKey(''); S.goog = null; gkRefresh();
     $('#gkey-status').textContent = 'Chave removida deste aparelho.';
-    if(S.trip){ renderVerdict(); renderReadout(); renderRuler(); renderLegend(); }
+    /* sem a chave, o mapa e a rota voltam a ser os do OpenStreetMap */
+    MapCtl.restyle().then(() => { if(S.route && !S.demo) plan({keep: true}); });
   });
   /* conferência: comparar as previsões guardadas com a chuva observada por satélite */
   const confBusy = (on, msg) => { $('#conf-run').disabled = on; $('#conf-retro').disabled = on; if(msg != null) $('#conf-status').textContent = msg; };
@@ -1679,7 +1785,7 @@ async function boot(){
   initUI();
   const live = await probe();
   if(live){
-    S.live = true; MapCtl.init(true);
+    S.live = true; await MapCtl.init(true);        /* espera o mapa: é ele que diz se o fundo do Google abriu */
     if(!S.route && !S.busy && readHash()) plan({auto: true});        /* abriu por um favorito: já mostra a viagem */
     else if(!S.route && !S.busy && !els.from.value.trim() && location.protocol === 'https:' && 'geolocation' in navigator){
       /* como nos apps de mapa, a partida começa como a sua localização; a posição só é pedida ao consultar,
@@ -1690,6 +1796,48 @@ async function boot(){
   }
   else if(!S.route && !S.busy) enterDemo();
 }
+/* ================= atualização do app =================
+   O app instalado é esta mesma página: quando sai uma versão nova, basta recarregar, sem instalar de novo.
+   O app confere sozinho ao abrir e ao voltar para a tela. Sem viagem na tela, já recarrega; com viagem, avisa no menu. */
+const APP_VERSION = ((document.querySelector('meta[name="app-version"]') || {}).content || '').trim();
+const Updater = (() => {
+  let last = 0;
+  const num = v => String(v).split('.').map(x => parseInt(x, 10) || 0);
+  const newer = (a, b) => { const A = num(a), B = num(b); for(let i = 0; i < Math.max(A.length, B.length); i++){ if((A[i] || 0) !== (B[i] || 0)) return (A[i] || 0) > (B[i] || 0); } return false; };
+  const page = () => location.href.split('#')[0];
+  /* lê a página publicada, sem passar por cópia guardada, e compara o número da versão */
+  async function check(){
+    if(!/^https?:$/.test(location.protocol)) throw new Error('o app está aberto como arquivo');
+    const res = await fetch(page(), {cache: 'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const m = /<meta name="app-version" content="([^"]+)"/.exec(await res.text());
+    last = Date.now();
+    const latest = m ? m[1].trim() : '';
+    return {latest, has: !!latest && !!APP_VERSION && newer(latest, APP_VERSION)};
+  }
+  async function apply(){
+    try{ if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); } }catch(_){ /* segue */ }
+    try{ await fetch(page(), {cache: 'reload'}); }catch(_){ /* segue */ }
+    location.reload();
+  }
+  function mark(v){
+    document.body.classList.add('has-upd');
+    const st = $('#upd-status'), b = $('#upd-btn');
+    if(st) st.textContent = `Há uma versão nova (${v}). Toque em “Atualizar agora”; a viagem na tela será consultada de novo.`;
+    if(b){ b.textContent = 'Atualizar agora'; b.dataset.ready = '1'; }
+  }
+  async function auto(){
+    if(Date.now() - last < 20 * MIN || navigator.onLine === false) return;
+    try{
+      const r = await check();
+      if(!r.has) return;
+      const idle = !S.route && !S.draft && !S.busy && !Live.on() && !els.to.value.trim() && !document.querySelector('input:focus, textarea:focus');
+      if(idle) apply(); else mark(r.latest);
+    }catch(_){ /* sem rede agora: confere na próxima */ }
+  }
+  return {check, apply, auto, mark, newer};
+})();
+
 /* ================= acompanhamento: onde estou e o que vem pela frente =================
    Usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho traçado;
    a hora de cada trecho à frente passa a contar a partir de agora, e não do horário planejado.
@@ -1738,8 +1886,11 @@ const Live = (() => {
     if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
     return '';
   }
+  /* a linha de estado que aparece quando o painel está recolhido (botão "Mapa") */
+  const setMini = html => { const m = $('#live-mini'); if(m){ m.hidden = !html; m.innerHTML = html || ''; } };
   function render(){
     const box = $('#live'), btn = $('#live-btn');
+    if(!on() || !last || !S.trip) setMini(S.trip ? `<b>${esc($('#v-head').textContent)}</b>` : '');
     btn.hidden = !S.trip || !!S.demo;
     $('#swap-btn').hidden = !S.trip || !!S.demo;
     btn.setAttribute('aria-pressed', String(on()));
@@ -1772,17 +1923,18 @@ const Live = (() => {
     const ups = [];
     if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
     if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
-    if(S.wxAt) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    if(S.wxAt && !S.gOnly) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` + (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
     if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
     if(note) h += `<p class="live-calm">${esc(note)}</p>`;
     box.innerHTML = h;
   }
   function fix(pos){
     if(!S.route || !S.trip || !on()) return;
-    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now();
+    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now(), first = !last;
     last = {lon, lat, acc: pos.coords.accuracy, sp, at: now}; msg = '';
     lastFix = {lat, lon, at: now};
-    MapCtl.me(lon, lat);
+    MapCtl.me(lon, lat, first);
     /* o trecho em que estou passa a ser "agora": desloca o horário de saída, no máximo uma vez por minuto */
     const depEff = now - sp.t * 1000 * (1 + S.slack);
     const gap = Math.abs(depEff - S.departMs);           /* diferença entre o relógio da viagem e a posição real */
@@ -1843,7 +1995,7 @@ const Live = (() => {
         try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ if(primGoogle()) recompute(); else { renderVerdict(); renderReadout(); renderRuler(); renderList(); } } }
         catch(e){ note = `Não deu para atualizar a chuva pelo Google agora (${(e && e.message) || 'sem resposta'}).`; }
       }
-      if(now - (S.wxAt || 0) > EVERY.wx){
+      if(!S.gOnly && now - (S.wxAt || 0) > EVERY.wx){
         try{ await refreshWeather(); }
         catch(e){ S.wxAt = now - EVERY.wx + 20 * MIN; note = 'Não deu para atualizar os modelos agora; o app tenta de novo em 20 minutos.'; }
       }
@@ -1866,6 +2018,7 @@ const Live = (() => {
     due = {traf: 0, goog: (S.goog && S.goog.when) || 0, replan: 0};
     watch = navigator.geolocation.watchPosition(fix, fail, {enableHighAccuracy: true, maximumAge: 5000, timeout: 30000});
     timer = setInterval(tick, EVERY.tick);
+    if(isMobile()) setSheet('mini');           /* no celular, o painel recolhe para o mapa e a posição ficarem à vista */
     keepAwake(); render();
   }
   function stop(keepMsg){
@@ -1884,7 +2037,7 @@ const Live = (() => {
 })();
 
 /* acesso para testes e diagnóstico */
-window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers, MapCtl, Pins};
+window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers, MapCtl, Pins, Updater, GMap};
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 

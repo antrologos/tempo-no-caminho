@@ -63,6 +63,11 @@ function buildVerdict(trip){
       if(pk.amt != null) sub += ` Se chover, em geral ${nf(pk.amt, 1)} mm/h${pk.hi > pk.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(pk.hi, 1)}` : ''}.`;
       if(e.regime === 'pancada') sub += ' É chuva isolada: atinge alguns pontos, por pouco tempo, e pode ser forte; o horário é menos certo.';
       else if(e.regime === 'continua') sub += ' É chuva generalizada: cobre uma área grande e dura mais.';
+    } else if(pk.src === 'g'){
+      sub = `No pior trecho, a chance de chuva é de ${pct(pk.pop)}, pelo Google.`;
+      if(pk.gqpf != null && pk.gqpf >= 0.1) sub += ` O volume esperado nessa hora é de ${nf(pk.gqpf, 1)} mm.`;
+      if(e.regime === 'pancada') sub += ' É chuva isolada: atinge alguns pontos, por pouco tempo, e pode ser forte; o horário é menos certo.';
+      else if(e.regime === 'continua') sub += ' É chuva generalizada: cobre uma área grande e dura mais.';
     } else if(pk.n > 1) sub = pk.wetN === pk.n ? `No pior trecho, os ${pk.n} modelos concordam.` : `No pior trecho, ${pk.wetN} de ${pk.n} modelos indicam chuva.`;
     const others = eps.slice(1);
     if(others.length && wetShare < 0.8){
@@ -114,7 +119,8 @@ function buildVerdict(trip){
   }
 
   /* a chance mostrada vem do Google: uma nota curta diz isso; a comparação trecho a trecho fica para quando o app usa os modelos */
-  if(trip.prim === 'g') notes.push({ic: 'info', html: 'A chance de chuva mostrada é a do Google. O conjunto de modelos, que costuma indicar mais chuva do que cai, aparece como linha tracejada no gráfico.'});
+  if(!S.demo && Goog.getKey() && GMap.failed()) notes.unshift({ic: 'info', html: 'Mapa e rota do OpenStreetMap, sem trânsito: o mapa do Google não abriu, e a rota dele só pode aparecer sobre o mapa dele. Para liberar, ative a “Map Tiles API” no projeto da chave (o passo a passo está no menu).'});
+  if(trip.prim === 'g' && !S.gOnly) notes.push({ic: 'info', html: 'A chance de chuva mostrada é a do Google. O conjunto de modelos, que costuma indicar mais chuva do que cai, aparece como linha tracejada no gráfico.'});
   const gmax = trip.prim === 'g' ? null : pts.reduce((b, p, i) => { const q = Goog.at(i, p.t); return q && (!b || q.pop > b.pop) ? {pop: q.pop, i, t: p.t} : b; }, null);
   let dis = null;
   pts.forEach((p, i) => {
@@ -235,7 +241,7 @@ function buildVerdict(trip){
   const lead = trip.dep - Date.now();
   if(trip.dep < Date.now() - 20 * MIN) notes.push({ic: 'info', html: 'Esse horário de saída já passou.'});
   if(lead > 3 * DAY) notes.push({ic: 'info', html: `Faltam ${Math.round(lead / DAY)} dias. A essa distância, a hora e o lugar da chuva ainda mudam bastante; confira de novo perto da saída.`});
-  if(!S.demo && (!S.wx.ens || !S.wx.ens.list.length)) notes.push({ic: 'info', html: 'As simulações de probabilidade não responderam agora; a chance mostrada vem só dos modelos detalhados.'});
+  if(!S.demo && !S.gOnly && (!S.wx.ens || !S.wx.ens.list.length)) notes.push({ic: 'info', html: 'As simulações de probabilidade não responderam agora; a chance mostrada vem só dos modelos detalhados.'});
   if(S.wx.beyond && S.wx.beyond.length) notes.push({ic: 'info', html: `${joinNames(S.wx.beyond.map(m => m.short))} ainda não ${S.wx.beyond.length > 1 ? 'alcançam' : 'alcança'} essa data.`});
   if(S.wx.failed && S.wx.failed.length) notes.push({ic: 'info', html: `${joinNames(S.wx.failed.map(m => m.short))} não ${S.wx.failed.length > 1 ? 'responderam' : 'respondeu'} agora; o resumo usa ${S.wx.list[0].id === FALLBACK_MODEL.id ? 'a combinação automática do Open-Meteo' : S.wx.list.length > 1 ? 'os outros' : 'o ' + S.wx.list[0].short}.`});
   if(!S.demo && navigator.onLine === false) notes.push({ic: 'info', html: 'Sem conexão: esta pode ser a última previsão guardada neste aparelho.'});
@@ -253,7 +259,7 @@ function factsText(trip){
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
   const stops = S.demo ? '' : viaText(S.vias);
-  const src = S.demo ? '' : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Google.` : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -344,10 +350,12 @@ function renderReadout(){
   else if(!all && c > 0) side = `${nf(v, 1)} mm/h`;
   /* a leitura do ponto, em linhas curtas com rótulo: nada de parágrafo corrido nem de texto cortado */
   const facts = [];
-  if(k) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
+  if(k && (p.ens || p.n)) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
   const gg = Goog.at(i, p.t);
   if(p.src === 'g'){
-    facts.push(['Fonte', `chance do Google${gg && gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg && gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
+    const gExtra = `${gg && gg.qpf != null ? `volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg && gg.th != null && gg.th >= 30 ? `${gg.qpf != null ? '; ' : ''}trovoada, ${Math.round(gg.th)}%` : ''}`;
+    if(p.popApp != null) facts.push(['Fonte', 'chance do Google' + (gExtra ? '; ' + gExtra : '')]);
+    else if(gExtra) facts.push(['Volume', gExtra]);
     if(p.popApp != null) facts.push(['Modelos', `${pct(p.popApp)} de chance pelo conjunto de modelos`]);
   } else if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
   if(k >= 2 && p.regime === 'pancada'){
@@ -380,7 +388,7 @@ function renderReadout(){
     `<div class="ro-where">${esc(where)}</div>` +
     `<div class="ro-cond"><i style="background:${dot}"></i><b>${cond}</b>${side ? `<span>${side}</span>` : ''}</div>` +
     `<dl class="ro-facts">${facts.map(f => `<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>` +
-    (gg ? '<details class="why"><summary>Por que o Google e os modelos diferem?</summary><p>' + (p.src === 'g'
+    (gg && p.popApp != null ? '<details class="why"><summary>Por que o Google e os modelos diferem?</summary><p>' + (p.src === 'g'
       ? 'A chance mostrada é a do Google: nas verificações feitas com este app, ela errou bem menos. A dos modelos é a parte das previsões de vários centros em que chove neste trecho e hora; ela costuma indicar mais chuva do que cai, porque os modelos acertam a região e o dia melhor do que o ponto e a hora.'
       : 'A chance mostrada é a do conjunto de modelos: a parte das previsões de vários centros em que chove neste trecho e hora. Ela costuma indicar mais chuva do que cai. A do Google é a chance que o Google publica para este ponto, já ajustada por ele.')
       + ' Nenhuma das duas é garantia: a verificação, depois da viagem, mostra qual chegou mais perto.</p><p>No volume, o app mostra quanto os modelos preveem quando chove. O Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor.</p></details>' : '');
@@ -488,8 +496,8 @@ function renderRuler(){
 
   /* gráfico de baixo: a força da chuva pelos modelos detalhados */
 
-  g += `<text class="t" x="${L}" y="${titleB}">${pts.some(p => p.ens) ? 'Se chover, quanta chuva (mm/h)' : 'Quanta chuva, em mm/h, pelos modelos'}</text>`;
-  g += legendRow([[catColor(2), 'em geral'], [catColor(2), 'nos casos mais fortes', 0.3]], L, titleB + LEG - 1, pw);
+  g += `<text class="t" x="${L}" y="${titleB}">${(S.gOnly || pts.some(p => p.ens)) ? 'Se chover, quanta chuva (mm/h)' : 'Quanta chuva, em mm/h, pelos modelos'}</text>`;
+  g += legendRow(S.gOnly ? [[catColor(2), 'estimativa pelo volume e pela chance do Google']] : [[catColor(2), 'em geral'], [catColor(2), 'nos casos mais fortes', 0.3]], L, titleB + LEG - 1, pw);
   /* o volume esperado pelo Google, como linha por cima das barras */
   const gVol = pts.map((p, i) => { const q = Goog.at(i, p.t); return q && q.qpf != null ? q.qpf : null; });
   if(gVol.some(v => v != null)) g += `<line x1="${L + pw - 58}" x2="${L + pw - 46}" y1="${titleB - 4}" y2="${titleB - 4}" stroke="${cssVar('--ink')}" stroke-width="2"/><text class="s" x="${L + pw}" y="${titleB}" text-anchor="end">Google</text>`;
@@ -616,6 +624,9 @@ function renderRuler(){
 
 /* ---------- quadro recolhido: os modelos detalhados, para quem quiser conferir ---------- */
 function renderModels(){
+  /* previsão toda do Google: a comparação entre modelos e o teste dos modelos não têm o que mostrar */
+  els.layout.classList.toggle('g-only', !!S.gOnly);
+  if(S.gOnly){ $('#models').hidden = true; return; }
   const box = $('#models'), el = $('#models-chart');
   if(!S.trip || !box) return;
   box.hidden = S.wx.list.length < 1 || !S.trip.pts.some(p => p.ens);     /* sem simulações, o gráfico principal já é o dos modelos */
@@ -789,6 +800,7 @@ function renderLayers(){
   $('#layer-chips').innerHTML = list.map(x => `<button type="button" role="radio" aria-checked="${x[0] === S.layer}" data-layer="${x[0]}">${x[1]}</button>`).join('');
   const k = (v, t) => `<span><i style="background:var(${v})"></i>${t}</span>`;
   const KEY = {
+    chuva: k('--dry', 'sem chuva') + CATS.slice(1).map(c => k(c.v, c.label)).join('') + '<span class="lk-note">cor mais apagada: chance menor</span>',
     vento: k('--dry', 'rajadas até 35 km/h') + k('--a1', '35 a 50') + k('--a2', '50 a 70') + k('--a3', '70 ou mais'),
     noite: k('--dry', 'dia') + k('--nightc', 'noite'),
     neblina: k('--dry', 'sem neblina') + k('--a2', 'neblina possível'),
@@ -799,6 +811,7 @@ function renderLayers(){
   };
   $('#layer-key').innerHTML = KEY[S.layer] || '';
   box.hidden = false;
+  MapCtl.credit();
 }
 function refreshExtras(){
   if(!S.trip) return;

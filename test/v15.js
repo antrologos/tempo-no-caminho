@@ -25,7 +25,7 @@ const errs = o => JSON.stringify(o.log.errors.filter(e => !/Failed to load resou
     await o.page.waitForTimeout(9000);
     s = await state();
     console.log('FORA DO CAMINHO', JSON.stringify({ de: s.de, dist: s.dist, n: s.n, painel: s.painel.slice(-230) }), '| Open-Meteo depois:', count(/open-meteo.*start_date/) - c0.om);
-    await o.page.locator('#live-btn').click({ force: true }); await o.page.waitForTimeout(300);
+    await o.page.locator('#lm-stop').click(); await o.page.waitForTimeout(300);
   } catch (e) { console.log('FALHA', e.message.slice(0, 300)); await o.page.screenshot({ path: 'shots/v39-fail.png' }); }
   console.log('erros:', errs(o)); await o.browser.close();
 })();

@@ -25,12 +25,12 @@ Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GP
 | O quê | Serviço | Observações |
 |---|---|---|
 | Caminho e tempo de viagem | Google Routes API (com chave) ou OSRM nos servidores da FOSSGIS | sem chave, o caminho é o do OpenStreetMap, sem trânsito |
-| Previsão do tempo | Open-Meteo: simulações (ensembles) do ECMWF, GFS e ICON e modelos detalhados de até nove centros | uso gratuito não comercial, 10.000 chamadas por dia por rede |
-| Chance de chuva principal, com chave | Google Weather API | viagens nos próximos 7 dias; 10.000 chamadas por mês sem cobrança. Sem chave, a chance vem do conjunto de modelos |
+| Previsão do tempo, com chave | Google Weather API | viagens nos próximos 7 dias: chance de chuva, volume, trovoada, temperatura, vento, visibilidade e dia ou noite; 10.000 chamadas por mês sem cobrança. Nesse caso os modelos não são consultados |
+| Previsão do tempo, sem chave ou além de 7 dias | Open-Meteo: simulações (ensembles) do ECMWF, GFS e ICON e modelos detalhados de até nove centros | uso gratuito não comercial, 10.000 chamadas por dia por rede |
 | Tipo de pista, faixas e piso | Overpass API (dados do OpenStreetMap) | lidos em dois pontos por trecho do caminho |
 | Relevo | Open-Meteo Elevation (modelo de terreno Copernicus, malha de 90 m) | até 200 pontos por viagem |
 | Nomes de lugares | Photon (Komoot) | |
-| Mapa | OpenFreeMap, desenhado com MapLibre GL JS | |
+| Mapa de fundo | Google Map Tiles API quando a rota é do Google; OpenFreeMap nos outros casos. Desenhado com MapLibre GL JS | os termos do Google exigem que a rota dele apareça sobre um mapa dele; se a Map Tiles API não estiver liberada na chave, o app usa mapa e rota do OpenStreetMap e avisa |
 | Chuva observada | NASA GIBS, produto IMERG | só na verificação; chega umas 5 horas depois |
 
 ## Privacidade e chaves
@@ -38,7 +38,7 @@ Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GP
 - Nada é enviado a um servidor do projeto, porque ele não existe. As consultas saem do seu navegador direto para os serviços acima.
 - Viagens salvas, preferências, a chave do Google e o registro das previsões ficam no armazenamento local do navegador, em cada aparelho.
 - **Nunca coloque uma chave no código nem neste repositório.** A chave é digitada na tela e fica só no navegador de quem a digitou. Quem abre o site sem chave usa apenas os serviços gratuitos.
-- Depois de publicar, restrinja a sua chave no Google Cloud ao endereço do site (restrição por site) e às duas APIs usadas.
+- Depois de publicar, restrinja a sua chave no Google Cloud ao endereço do site (restrição por site) e às três APIs usadas: Weather API, Routes API e Map Tiles API.
 
 ## Montar
 
@@ -78,6 +78,8 @@ O site publicado é o conteúdo da pasta `docs`. Para atualizar, basta substitui
 ## Instalar no celular
 
 Com o site aberto no Chrome do Android, use o menu e escolha "Instalar app" (ou "Adicionar à tela inicial"). O app abre em tela cheia e guarda a última consulta para uso sem conexão.
+
+Não é preciso instalar de novo a cada versão: o app instalado é a própria página do site. Ele confere se há versão nova ao abrir e ao voltar para a tela; no menu, "Versão e atualização" mostra o número da versão e tem o botão "Procurar atualização". O número fica em `src/template.html`, na linha `<meta name="app-version">`, e deve subir a cada publicação.
 
 ## Limitações conhecidas
 

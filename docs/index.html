@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+  <meta name="app-version" content="4.2">
 <title>Tempo no caminho</title>
 <meta name="description" content="Previsão do tempo ao longo de um trajeto: a chance e a força da chuva em cada trecho, na hora em que você passa por ele.">
 <meta name="theme-color" content="#F1F3F4" media="(prefers-color-scheme: light)">
@@ -660,6 +661,40 @@ body.drafting #layers{display:none}
 .mk-handle{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 6px rgba(0,0,0,.55);pointer-events:none}
 .mk-pass{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 5px rgba(0,0,0,.45);cursor:pointer}
 
+/* ---------- previsão toda do Google: os modelos saem da tela (versão 4.2) ---------- */
+.g-only #models,.g-only #conf-retro,.g-only #conf-toggle{display:none}
+
+/* ---------- painel "Mapa", botão de centralizar e mapa do Google (versão 4.2) ---------- */
+.livemini{display:none}
+.mapbtn{position:absolute;z-index:5;right:10px;width:44px;height:44px;display:grid;place-items:center;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 2px 9px rgba(0,0,0,.32)}
+.mapbtn .ic{width:23px;height:23px}
+.mapbtn[aria-pressed="true"]{color:#1B6FE8}
+.glogo{position:absolute;z-index:4;left:10px;bottom:8px;display:flex;align-items:center;gap:8px;pointer-events:none;font-size:11px;color:var(--ink);text-shadow:0 0 3px var(--surface),0 0 3px var(--surface)}
+.glogo[hidden]{display:none}
+.glogo img{display:block;height:22px;width:auto}
+@media (min-width:900px){ #recenter{bottom:108px} }
+@media (max-width:899px){
+  #recenter{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 62px)}
+  .glogo{bottom:auto;top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 62px)}
+  .sheetbar button{font-size:13.5px;padding-left:2px;padding-right:2px}
+  .layout[data-sheet="mini"] > :not(.sheetbar):not(.livemini){display:none}
+  .layout[data-sheet="mini"] .livemini{display:block;margin:0 0 2px;font-size:14.5px;line-height:1.35}
+  .layout[data-sheet="mini"] .livemini[hidden]{display:none}
+  .livemini .lm-alert{display:block;margin-top:7px;padding:7px 10px;border-radius:10px;background:var(--yellow);color:#151A20;font-weight:700}
+}
+
+/* ---------- enquadrar a rota, legenda da chuva, aviso de versão nova (versão 4.2) ---------- */
+@media (min-width:900px){ #fitall{bottom:160px} }
+@media (max-width:899px){
+  #fitall{top:calc(var(--pill-h,64px) + env(safe-area-inset-top,0px) + 114px)}
+  .layer-key{max-width:calc(100% - 58px)}
+}
+.layer-key .lk-note{color:var(--muted)}
+body.has-upd .menubtn{position:relative}
+body.has-upd .menubtn::after{content:"";position:absolute;top:7px;right:7px;width:10px;height:10px;border-radius:50%;background:#E5484D;border:2px solid var(--surface)}
+
+.livemini .lm-stop{float:right;margin:0 0 4px 10px;height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13.5px;font-weight:700}
+
 </style>
 </head>
 <body>
@@ -687,6 +722,7 @@ body.drafting #layers{display:none}
     <symbol id="i-grab" viewBox="0 0 20 20"><path d="M4.500 7h11M4.500 10h11M4.500 13h11"/></symbol>
     <symbol id="i-loc" viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.200"/><path d="M10 2.500v3M10 14.500v3M2.500 10h3M14.500 10h3"/></symbol>
     <symbol id="i-relief" viewBox="0 0 20 20"><path d="M2.5 15.5l5-8.2 3 4.700 2.2-3 4.800 6.500z"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 20 20"><path d="M3 7.5V3h4.5M12.5 3H17v4.5M17 12.5V17h-4.5M7.5 17H3v-4.5"/></symbol>
     <symbol id="i-star" viewBox="0 0 20 20"><path d="M10 2.8l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L2.800 8.100l5-.7z"/></symbol>
   </defs>
 </svg>
@@ -790,11 +826,13 @@ body.drafting #layers{display:none}
 
   <main class="layout" id="layout" data-sheet="peek">
     <div class="sheetbar" id="sheetbar" role="group" aria-label="Quanto do painel mostrar">
+      <button type="button" data-sheet="mini" aria-pressed="false">Mapa</button>
       <button type="button" data-sheet="peek" aria-pressed="true">Resumo</button>
       <button type="button" data-sheet="half" aria-pressed="false">Gráfico</button>
       <button type="button" data-sheet="full" aria-pressed="false">Detalhes</button>
     </div>
 
+    <div class="livemini" id="live-mini" hidden></div>
     <div class="dtabs" id="dtabs" role="tablist" aria-label="Seções do resultado">
       <button type="button" role="tab" data-tab="resumo" aria-selected="true">Resumo</button>
       <button type="button" role="tab" data-tab="grafico" aria-selected="false">Gráfico</button>
@@ -837,6 +875,9 @@ body.drafting #layers{display:none}
     <div class="pin" id="pin">
       <div class="mapwrap" id="mapwrap">
         <div id="map" class="map"></div>
+        <button type="button" class="mapbtn" id="recenter" aria-label="Centralizar o mapa na minha posição" title="Centralizar o mapa na minha posição"><svg class="ic" aria-hidden="true"><use href="#i-loc"/></svg></button>
+        <button type="button" class="mapbtn" id="fitall" aria-label="Enquadrar a rota inteira" title="Enquadrar a rota inteira" hidden><svg class="ic" aria-hidden="true"><use href="#i-fit"/></svg></button>
+        <div class="glogo" id="glogo" hidden><img id="glogo-img" alt="Google" height="22"><span id="glogo-text"></span></div>
         <div class="pickbar" id="pickbar" hidden><span id="pickbar-text"></span><button type="button" id="pick-cancel">Cancelar</button></div>
         <div class="mapmenu" id="mapmenu" hidden role="menu" aria-label="Usar este ponto">
           <button type="button" role="menuitem" data-act="from">Partir daqui</button>
@@ -894,7 +935,7 @@ body.drafting #layers{display:none}
       </div>
       <label class="pref">Chance de chuva mostrada
         <select id="pref-prim">
-          <option value="g">A do Google, onde ele alcança (recomendado)</option>
+          <option value="g">A do Google; os modelos só entram se ele não cobrir a viagem</option>
           <option value="app">A do conjunto de modelos</option>
         </select>
       </label>
@@ -945,7 +986,7 @@ body.drafting #layers{display:none}
           <p><strong>Incerteza.</strong> As faixas mostradas, na força da chuva e nos minutos de chuva, vão do valor que 10% das previsões não alcançam ao que só 10% ultrapassam. São intervalos de previsão, não garantias, e costumam sair mais estreitos do que deveriam.</p>
           <p><strong>Conferência.</strong> No fim desta tela, o app compara as previsões guardadas com a chuva observada por satélite (o produto IMERG, da NASA, com um ponto a cada 11 km, de meia em meia hora). A nota de erro vai de 0, perfeito, a 1. O satélite também erra, sobretudo em chuva fraca, então a nota é um guia e não uma sentença.</p>
           <p><strong>Teste e ajuste.</strong> O teste compara as previsões que os modelos fizeram na véspera com a chuva observada nos últimos 10 dias, no próprio trajeto. Com dados reais, ele mostrou que os modelos avisam chuva mais vezes do que chove. O teste também calcula um ajuste que desconta esse excesso, medido em dias que ficaram de fora do cálculo. O ajuste é um experimento feito para este app, com poucos dias de dados: fica desligado, e as chances mostradas são as dos modelos, a menos que você o ligue.</p>
-          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual chance o app mostra.</strong> Com a chave, a chance de chuva mostrada em cada trecho é a do Google, nas viagens dos próximos 7 dias: nas verificações feitas com este app, ela errou bem menos que a do conjunto de modelos. O conjunto continua dando o volume quando chove, o tipo de chuva e a chance das viagens que o Google não alcança, e aparece como linha tracejada no gráfico. No menu dá para voltar à chance do conjunto. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
+          <p><strong>Google.</strong> Com uma chave pessoal, o app também busca a previsão horária do Google, que combina modelos de inteligência artificial, previsão de curtíssimo prazo e modelos tradicionais. Ela não se mistura com a previsão do app: aparece como uma linha nos dois gráficos e uma frase na leitura, para comparar, e entra na verificação. <strong>Qual previsão o app mostra.</strong> Com a chave, e para viagens nos próximos 7 dias, a previsão vem toda do Google: chance de chuva, volume esperado, trovoada, temperatura, vento, visibilidade e dia ou noite. Nesse caso os modelos não são consultados nem aparecem na tela, e o limite gratuito do Open-Meteo só é usado para a altitude do caminho. Os modelos entram quando o Google não cobre a viagem: sem chave, além de 7 dias ou se ele não responder. No menu dá para voltar à chance do conjunto de modelos. Nos números da viagem inteira, com o Google, o app mostra a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (a soma, trecho a trecho, da chance pela duração). <strong>Por que os números diferem.</strong> A chance do app é a parte das previsões do conjunto em que chove naquele trecho e hora; ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para aquele ponto e hora, já ajustada por ele. Nenhuma das duas é garantia, e só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho. No volume, o app mostra quanto os modelos preveem quando chove; o Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor. Vale para viagens nos próximos 7 dias. No uso econômico, consulta de 7 a 17 pontos do trajeto; no completo, todos os trechos. O Google entrega 24 horas por chamada e por ponto, e não cobra até 10.000 chamadas por mês.</p>
           <p><strong>Modelos principais.</strong> Os quatro modelos de malha mais fina (ECMWF, GFS, ICON e UKMO) aparecem num quadro recolhido, para quem quiser comparar. Quando indicam algo mais forte do que o conjunto, o app avisa.</p>
           <p><strong>De onde vêm os dados.</strong> As medições (estações, balões, aviões, navios, radares e, principalmente, satélites) são trocadas entre os países. Cada centro meteorológico usa essas medições para montar o retrato da atmosfera e rodar o seu modelo. Este app recebe as previsões de até nove centros (europeu, americano, alemão, britânico, coreano, canadense, australiano, chinês e francês) por um único distribuidor, o Open-Meteo. Onde há menos medições e mais chuva isolada, como em boa parte do Brasil, a hora e o lugar exatos da chuva são menos confiáveis.</p>
           <p><strong>No mapa.</strong> A linha segue a estrada de verdade. A cor é a força da chuva; quanto menor a chance, mais apagada a cor, até o cinza de trecho seco. As etiquetas amarelas marcam trovoada, neblina ou vento forte possíveis: toque para ver a hora e o lugar.</p>
@@ -956,6 +997,7 @@ body.drafting #layers{display:none}
           <p><strong>Acompanhar a viagem.</strong> Com o app aberto num endereço seguro (https) ou instalado, o botão "Acompanhar a viagem" usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho; a hora de cada trecho à frente passa a contar a partir de agora, e o painel mostra o que vem em 10, 30 e 60 minutos (5, 15 e 30 a pé ou de bicicleta) e o próximo aviso. Durante o acompanhamento o app se atualiza sozinho: o trânsito, a partir da sua posição, a cada 5 minutos; a chuva pelo Google nos trechos à frente, a cada 15 minutos; os modelos e as simulações, a cada 3 horas, porque mudam poucas vezes por dia e o serviço gratuito é limitado. Se você ficar a mais de 800 m do caminho traçado por mais de três minutos, a rota é refeita a partir de onde você está, no máximo a cada 15 minutos e 8 vezes por viagem, porque cada rota refeita gasta uma consulta inteira de previsão. O painel mostra a hora da última atualização de cada dado.</p>
           <p><strong>Partida, chegada e horário.</strong> Tanto a partida quanto a chegada podem ser a sua localização, lida pelo GPS do aparelho: escolha "Minha localização" na lista que aparece ao tocar no campo. Isso só funciona com o app aberto no endereço https ou instalado. O horário de saída começa sempre em "agora" e não pode ficar no passado; para outro horário, altere o dia e a hora.</p>
           <p><strong>Paradas, pontos no mapa e rotas alternativas.</strong> Você pode incluir até 8 paradas entre a partida e a chegada e mudar a ordem arrastando pelo ícone de três traços; a partida e a chegada entram na mesma ordem. Para marcar um ponto no mapa, toque nele (fora da linha da rota) e escolha partir dali, passar por ali ou chegar ali. Para mudar só um trecho, puxe a linha da rota com o mouse (no computador) ou use “Passar por aqui”: o app pede ao Google que passe pelo ponto novo e mantenha o resto do caminho, guardando alguns pontos da rota atual. O ponto de passagem aparece como uma bolinha branca; clicar nela o retira. O app primeiro traça o caminho e mostra as rotas possíveis; a previsão do tempo só é buscada depois que você confirma o caminho, para não gastar consultas enquanto a rota ainda está sendo definida. Quando não há paradas, o app pede também as rotas alternativas e mostra cada uma com o tempo e a distância; a previsão é buscada para a rota escolhida, e para as outras só quando você toca nelas, porque cada rota gasta uma consulta inteira de previsão.</p>
+          <p><strong>Mapa de fundo.</strong> Quando a rota é do Google, o mapa de fundo também é o do Google (Map Tiles API): é uma exigência dos termos dele, e evita que a linha da rota saia do desenho da estrada. Se essa API não estiver liberada na chave, o app usa o mapa e a rota do OpenStreetMap e avisa. Sem chave, tudo vem do OpenStreetMap. No celular, o botão “Mapa” recolhe o painel e deixa o mapa à vista; o botão de mira, sobre o mapa, volta para a sua posição.</p>
           <p><strong>Tempo de viagem.</strong> A rota vem do OpenStreetMap e não enxerga trânsito ao vivo, obras nem paradas. Use a folga para aproximar da sua realidade. Os horários seguem o fuso do seu aparelho.</p>
           <p><strong>Prazo.</strong> Quanto mais distante a data, menos confiáveis são a hora e o lugar exatos da chuva. Além de dois ou três dias, vale mais a tendência do que o detalhe. Confira de novo perto da saída.</p>
           <p><strong>O que não aparece aqui.</strong> Interdições, quedas de barreira, alagamentos e avisos oficiais. Antes de pegar a estrada, veja os alertas do INMET e da Defesa Civil e as condições da rodovia com a PRF ou a concessionária.</p>
@@ -969,6 +1011,12 @@ body.drafting #layers{display:none}
   <div class="drawer" id="drawer" hidden>
     <div class="drawer-card" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       <div class="drawer-top"><h2 id="drawer-title">Menu</h2><button type="button" class="inbtn" id="drawer-close" aria-label="Fechar o menu"><svg class="ic"><use href="#i-close"/></svg></button></div>
+      <section class="menu-sec" id="upd-sec">
+        <h3>Versão e atualização</h3>
+        <p>Versão <strong id="upd-ver"></strong>. O app instalado é esta mesma página: ele se atualiza sozinho ao abrir com internet, sem instalar de novo. Se quiser conferir na hora, use o botão.</p>
+        <div class="conf-btns"><button type="button" class="btn-conf" id="upd-btn">Procurar atualização</button></div>
+        <p class="conf-status" id="upd-status" role="status"></p>
+      </section>
       <section class="menu-sec">
         <h3>Instalar como aplicativo</h3>
         <p id="install-text"></p>
@@ -984,12 +1032,12 @@ body.drafting #layers{display:none}
             <li>Abra <strong>console.cloud.google.com</strong> com a sua conta do Google.</li>
             <li>Crie um projeto, com qualquer nome.</li>
             <li>Se o Google pedir, ative o faturamento do projeto.</li>
-            <li>No menu, vá em “APIs &amp; Services” e depois em “Library”. Procure e ative a <strong>Weather API</strong> e a <strong>Routes API</strong>.</li>
+            <li>No menu, vá em “APIs &amp; Services” e depois em “Library”. Procure e ative três serviços: a <strong>Weather API</strong> (previsão), a <strong>Routes API</strong> (rota e trânsito) e a <strong>Map Tiles API</strong> (o mapa de fundo; o Google exige que a rota dele apareça sobre o mapa dele).</li>
             <li>Vá em “APIs &amp; Services”, “Credentials”, “Create credentials”, “API key”.</li>
-            <li>Abra a chave criada. Em “API restrictions”, escolha “Restrict key” e marque só essas duas APIs. Em “Application restrictions”, escolha “Websites” e acrescente o endereço deste site, terminado em /*.</li>
+            <li>Abra a chave criada. Em “API restrictions”, escolha “Restrict key” e marque só essas três APIs. Em “Application restrictions”, escolha “Websites” e acrescente o endereço deste site, terminado em /*.</li>
             <li>Copie a chave, cole no campo “Chave do Google”, logo abaixo, e toque em “Salvar e testar”.</li>
           </ol>
-          <p>Uso mensal sem cobrança, pelo que consta nas páginas do Google: 10.000 consultas de clima; 5.000 rotas com trânsito; 1.000 rotas com a intensidade do trânsito por trecho.</p>
+          <p>Uso mensal sem cobrança, pelo que consta nas páginas do Google: 10.000 consultas de clima; 5.000 rotas com trânsito; 1.000 rotas com a intensidade do trânsito por trecho; 100.000 imagens do mapa de fundo.</p>
         </details>
       </section>
       <div id="drawer-slots"></div>
@@ -1563,6 +1611,10 @@ function expandDet(d, map){
   return {t0: d.t0, n: d.n, data};
 }
 
+/* quando a previsão vem toda do Google, os modelos não são consultados: fica este conjunto vazio no lugar */
+const emptyWx = () => ({models: {}, list: [], failed: [], beyond: [], extra: {list: [], data: {}}, lag: {data: {}, n: 0},
+  ens: {list: [], data: {}, total: 0}, cells: 0, cost: 0, detPts: 0, span: [0, 0], none: true});
+
 async function loadWeather(samples, dep, routeDur){
   const day0 = startOfDay(dep);
   /* pede o dia da saída e mais dois: mudar a data ou a hora dentro dessa janela não gasta nova consulta */
@@ -1794,13 +1846,25 @@ function computeTrip(dep){
     }
     const n = ps.length;
     const med = n ? median(ps) : null, max = n ? Math.max(...ps) : null, min = n ? Math.min(...ps) : null;
-    const temp = temps.length ? median(temps) : null, cape = capes.length ? median(capes) : null;
+    let temp = temps.length ? median(temps) : null;
+    const cape = capes.length ? median(capes) : null;
     const ens = ensAt(i, t);
 
     const popApp = ens ? ens.pop : (n ? wetHR.length / n : null);
     /* a chance mostrada: a do Google, onde ele alcança; senão, a do conjunto de modelos */
     const gq = useG ? Goog.at(i, t) : null;
     const pop = gq ? gq.pop : popApp;
+    /* o que os modelos não trouxeram (ou quando só o Google entra) vem do Google: temperatura, rajada, visibilidade, dia ou noite, trovoada */
+    if(gq){
+      if(temp == null && gq.temp != null) temp = gq.temp;
+      if(gust == null && gq.gust != null) gust = gq.gust;
+      if(vis == null && gq.vis != null) vis = gq.vis;
+      if(night == null && gq.day != null) night = gq.day === false;
+      if(!n){
+        if((gq.th != null && gq.th >= 40) || /THUNDER/.test(gq.type || '')) thunder++;
+        if(gq.vis != null && gq.vis < 1000) fog++;
+      }
+    }
     let klass = klassOf(pop);
     let amt = ens ? ens.wetMed : (wetHR.length ? median(wetHR) : null);
     /* o Google vê chuva e o conjunto não tem volume para dar: usa o volume esperado pelo Google, dividido pela chance */
@@ -1816,6 +1880,8 @@ function computeTrip(dep){
     if(klass >= 1){
       if(sumP > 0){ const fc = sumS / sumP; regime = fc >= 0.6 ? 'pancada' : fc <= 0.3 ? 'continua' : 'mista'; }
       else if(cape != null && cape >= 800) regime = 'pancada';
+      /* sem os modelos, o tipo de chuva vem da descrição do Google: pancadas e trovoadas são chuva isolada */
+      if(!regime && gq && gq.type) regime = /SHOWER|THUNDER/.test(gq.type) ? 'pancada' : /RAIN/.test(gq.type) ? 'continua' : null;
     }
 
     return {
@@ -1824,7 +1890,7 @@ function computeTrip(dep){
       thunder: thunder > 0, fog: fog > 0,
       wind: gust != null && gust >= md.gust,
       heat: md.heat != null && temp != null && temp >= md.heat,
-      ens, pop, popApp, src: gq ? 'g' : 'app', klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
+      ens, pop, popApp, src: gq ? 'g' : 'app', gqpf: gq ? gq.qpf : null, klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
       regime, shower: regime === 'pancada' && klass >= 2
     };
   });
@@ -1869,7 +1935,11 @@ function computeTrip(dep){
 
 /* janela de risco num ponto fixo: as horas em volta da passagem em que a chance fica em 30% ou mais */
 function riskWindow(i, t){
-  const at = dh => { const e = ensAt(i, t + dh * HOUR); return e ? e.pop : null; };
+  const at = dh => {
+    const g = primGoogle() ? Goog.at(i, t + dh * HOUR) : null;
+    if(g) return g.pop;
+    const e = ensAt(i, t + dh * HOUR); return e ? e.pop : null;
+  };
   const p0 = at(0);
   if(p0 == null || p0 < 0.3) return null;
   let a = 0, b = 0;
@@ -2466,20 +2536,21 @@ const Conf = (() => {
 
   function stats(){
     const st = load(), bins = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    let n = 0, trips = 0, wet = 0, bN = 0, nS = 0, bS = 0, bNs = 0, nD = 0, bD = 0, bNd = 0, nR = 0, bR = 0, bNr = 0, nG = 0, bG = 0, bNg = 0, wG = 0;
-    const LG = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];      /* por antecedência: trechos, erro do Google, erro dos modelos, chuvas */
+    let n = 0, trips = 0, wet = 0, bN = 0, nS = 0, bS = 0, bNs = 0, nD = 0, bD = 0, bNd = 0, nR = 0, bR = 0, bNr = 0, nG = 0, bG = 0, bNg = 0, wG = 0, nGm = 0;
+    const LG = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];      /* por antecedência: trechos, erro do Google, erro dos modelos, chuvas */
     for(const r of st.recs){
       if(!r.v) continue;
       trips++;
       r.rows.forEach((row, k) => {
-        const o = r.v[k], p = row[3], m = row[9] != null ? row[9] : row[3], lead = (row[2] - r.made) / 60;      /* m: a chance do conjunto de modelos; lead: horas entre a consulta e a passagem */
+        const o = r.v[k], p = row[3], m = row.length > 9 ? row[9] : row[3], lead = (row[2] - r.made) / 60;      /* m: a chance do conjunto de modelos; lead: horas entre a consulta e a passagem */
         n++; wet += o; bN += (p - o) ** 2;
         if(row[4] != null){ nS++; bS += (row[4] - o) ** 2; bNs += (p - o) ** 2; }
         if(row[5] != null){ nD++; bD += (row[5] - o) ** 2; bNd += (p - o) ** 2; }
         if(row[7] && row[6] != null){ nR++; bR += (row[6] - o) ** 2; bNr += (p - o) ** 2; }
         if(row[8] != null){
-          nG++; bG += (row[8] - o) ** 2; bNg += (m - o) ** 2; wG += o;
-          const q = LG[lead < 6 ? 0 : lead < 24 ? 1 : 2]; q[0]++; q[1] += (row[8] - o) ** 2; q[2] += (m - o) ** 2; q[3] += o;
+          nG++; bG += (row[8] - o) ** 2; wG += o;
+          const q = LG[lead < 6 ? 0 : lead < 24 ? 1 : 2]; q[0]++; q[1] += (row[8] - o) ** 2; q[3] += o;
+          if(m != null){ nGm++; bNg += (m - o) ** 2; q[4]++; q[2] += (m - o) ** 2; }
         }
         const b = bins[p < 0.3 ? 0 : p < 0.6 ? 1 : 2]; b[0]++; b[1] += p; b[2] += o;
       });
@@ -2487,7 +2558,7 @@ const Conf = (() => {
     const left = st.recs.filter(r => !r.v);
     return {n, trips, pending: left.length, next: left.length ? Math.min(...left.map(readyAt)) : null, base: n ? wet / n : null, bsNew: n ? bN / n : null,
       sim: nS ? {n: nS, bs: bS / nS, bsNew: bNs / nS} : null, det: nD ? {n: nD, bs: bD / nD, bsNew: bNd / nD} : null,
-      raw: nR ? {n: nR, bs: bR / nR, bsNew: bNr / nR} : null, goog: nG ? {n: nG, bs: bG / nG, bsNew: bNg / nG, base: wG / nG} : null, lead: LG, bins};
+      raw: nR ? {n: nR, bs: bR / nR, bsNew: bNr / nR} : null, goog: nG ? {n: nG, bs: bG / nG, nM: nGm, bsNew: nGm ? bNg / nGm : null, base: wG / nG} : null, lead: LG, bins};
   }
 
   const f3 = v => v == null ? 'sem dado' : nf(v, 3);
@@ -2499,11 +2570,12 @@ const Conf = (() => {
       A.push(['O que o app mostrou', s.sim ? s.sim.bsNew : s.bsNew]);
       if(s.base != null){ A.push(['Referência: prever sempre a frequência observada', s.base * (1 - s.base)]); A.push(['Referência: prever que nunca chove', s.base]); }
       if(s.goog){
-        A.push([`Google, em ${s.goog.n} trechos`, s.goog.bs]); A.push(['O conjunto de modelos, nesses mesmos trechos', s.goog.bsNew]);
+        A.push([`Google, em ${s.goog.n} trechos`, s.goog.bs]);
+        if(s.goog.nM) A.push([s.goog.nM === s.goog.n ? 'O conjunto de modelos, nesses mesmos trechos' : `O conjunto de modelos, em ${s.goog.nM} desses trechos`, s.goog.bsNew]);
         A.push(['Referência nesses trechos: a frequência observada', s.goog.base * (1 - s.goog.base)]);
         ['até 6 h de antecedência', 'de 6 a 24 h de antecedência', 'mais de 24 h de antecedência'].forEach((lab, q) => {
           const g = s.lead[q];
-          if(g[0]){ A.push([`Google, ${lab} (${g[0]} trechos; choveu em ${pct(g[3] / g[0])})`, g[1] / g[0]]); A.push([`Modelos, ${lab}`, g[2] / g[0]]); }
+          if(g[0]){ A.push([`Google, ${lab} (${g[0]} trechos; choveu em ${pct(g[3] / g[0])})`, g[1] / g[0]]); if(g[4]) A.push([`Modelos, ${lab}`, g[2] / g[4]]); }
         });
       }
       if(s.raw) A.push(['A mesma previsão, sem o ajuste', s.raw.bs]);
@@ -2637,20 +2709,20 @@ const Goog = (() => {
     if(!r.length) throw new Error('resposta vazia');
     return true;
   }
-  /* busca a previsão horária em 7 a 17 pontos do trajeto, do momento atual até 6 horas depois da chegada (no máximo 7 dias) */
-  /* opt.from: no acompanhamento, consulta só os trechos à frente do ponto em que a pessoa está; opt.force: ignora o que já está guardado */
-  async function load(opt = {}){
-    const key = getKey();
-    if(!key || S.demo || !S.samples || !S.trip) return null;
-    const trip = S.trip, now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = S.routeId;
-    if(trip.arr < now) return (S.goog = {routeId: rid, skip: 'passada'});
-    const need = Math.ceil((trip.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
-    if(need > MAXH + 6) return (S.goog = {routeId: rid, skip: 'longe'});
+  /* Monta a previsão horária do Google para um conjunto de trechos (ctx: samples, dep, arr, rid), de agora até
+     6 horas depois da chegada, no máximo 7 dias. Em 7 a 17 pontos do trajeto, ou em todos, no uso completo.
+     opt.from: no acompanhamento, só os trechos à frente; opt.reuse: uma previsão recente que ainda serve. */
+  async function build(ctx, opt = {}){
+    const key = getKey(), now = Date.now(), H0 = Math.floor(now / HOUR) * HOUR, rid = ctx.rid;
+    if(ctx.arr < now) return {routeId: rid, skip: 'passada'};
+    const need = Math.ceil((ctx.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
+    if(need > MAXH + 6) return {routeId: rid, skip: 'longe'};
     /* como fonte principal, o Google também alimenta o gráfico dos outros horários de saída: cobre até o fim do dia da partida */
-    const endDay = startOfDay(trip.dep) + DAY + (trip.arr - trip.dep);
+    const endDay = startOfDay(ctx.dep) + DAY + (ctx.arr - ctx.dep);
     const hours = Math.min(MAXH, opt.from == null && primGoogle() ? Math.max(need, Math.ceil((endDay - H0) / HOUR) + 1) : need);
-    if(!opt.force && S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
-    const N = S.samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
+    const R = opt.reuse;
+    if(R && R.pop && R.routeId === rid && R.hours >= hours && R.full === use().full && now - R.when < 30 * MIN) return R;
+    const samples = ctx.samples, N = samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
     const nPts = Math.min(M, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];
     for(let q = 0; q < nPts; q++){ const i = i0 + Math.round(q * (M - 1) / Math.max(1, nPts - 1)); if(idx[idx.length - 1] !== i) idx.push(i); }
     if(usage() + idx.length * pages > U.stop) throw new Error('o app atingiu o limite mensal que ele mesmo adota para o Google; volta no mês que vem');
@@ -2660,26 +2732,39 @@ const Goog = (() => {
       for(;;){
         const q = next++;
         if(q >= idx.length) return;
-        const s = S.samples[idx[q]];
-        res[q] = await fetchPoint(s.lat, s.lon, hours, key);
+        const sm = samples[idx[q]];
+        res[q] = await fetchPoint(sm.lat, sm.lon, hours, key);
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    if(rid !== S.routeId) return null;
     const start = h => Date.parse(h && h.interval && h.interval.startTime);
     const t0 = Math.min(...res.map(r => (r.length && isFinite(start(r[0]))) ? start(r[0]) : Infinity));
     if(!isFinite(t0)) throw new Error('resposta sem horários');
-    const mk = f => res.map(r => {
+    /* um vetor por ponto consultado, com o valor de cada hora; any: aceita texto e sim/não, além de número */
+    const mk = (f, any) => res.map(r => {
       const a = new Array(hours).fill(null);
-      r.forEach(h => { const k = Math.round((start(h) - t0) / HOUR); if(k >= 0 && k < hours){ const v = f(h); a[k] = (typeof v === 'number' && isFinite(v)) ? v : null; } });
+      r.forEach(h => { const k = Math.round((start(h) - t0) / HOUR); if(k >= 0 && k < hours){ const v = f(h); a[k] = any ? (v == null ? null : v) : ((typeof v === 'number' && isFinite(v)) ? v : null); } });
       return a;
     });
-    const P = h => h.precipitation || {};
-    S.goog = {routeId: rid, when: now, t0, hours, idx, calls: usage() - u0, full: U.full,
+    const P = h => h.precipitation || {}, Wd = h => h.wind || {};
+    return {routeId: rid, when: now, t0, hours, idx, calls: usage() - u0, full: U.full,
       pop: mk(h => P(h).probability ? P(h).probability.percent / 100 : null),
       qpf: mk(h => P(h).qpf ? P(h).qpf.quantity : null),
-      th: mk(h => h.thunderstormProbability)};
-    return S.goog;
+      th: mk(h => h.thunderstormProbability),
+      temp: mk(h => h.temperature ? h.temperature.degrees : null),
+      gust: mk(h => Wd(h).gust && Wd(h).gust.value != null ? Wd(h).gust.value : (Wd(h).speed ? Wd(h).speed.value : null)),
+      vis: mk(h => h.visibility && h.visibility.distance != null ? h.visibility.distance * (h.visibility.unit === 'MILES' ? 1609 : 1000) : null),
+      day: mk(h => h.isDaytime, true),
+      type: mk(h => h.weatherCondition ? h.weatherCondition.type : null, true)};
+  }
+  /* busca (ou reaproveita) a previsão do Google para a viagem que está na tela */
+  async function load(opt = {}){
+    const key = getKey();
+    if(!key || S.demo || !S.samples || !S.trip) return null;
+    const rid = S.routeId;
+    const G = await build({samples: S.samples, dep: S.trip.dep, arr: S.trip.arr, rid}, Object.assign({}, opt, {reuse: opt.force ? null : S.goog}));
+    if(rid !== S.routeId) return null;
+    return (S.goog = G);
   }
   /* o que o Google diz para a amostra i no instante t (o ponto consultado mais próximo no trajeto) */
   function at(i, t){
@@ -2689,10 +2774,80 @@ const Goog = (() => {
     for(let k = 1; k < G.idx.length; k++) if(Math.abs(G.idx[k] - i) < Math.abs(G.idx[q] - i)) q = k;
     const h = Math.floor((t - G.t0) / HOUR);
     if(h < 0 || h >= G.hours) return null;
-    const pop = G.pop[q][h];
-    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h]};
+    const pop = G.pop[q][h], v = name => G[name] ? G[name][q][h] : null;
+    return pop == null ? null : {pop, qpf: G.qpf[q][h], th: G.th[q][h], temp: v('temp'), gust: v('gust'), vis: v('vis'), day: v('day'), type: v('type')};
   }
-  return {getKey, setKey, test, load, at, usage, FREE, DAYS, stop: () => use().stop};
+  /* a previsão do Google alcança quase todos os trechos, na hora em que a pessoa passa por eles? */
+  function covers(G, samples, dep, k){
+    if(!G || !G.pop) return false;
+    let ok = 0;
+    samples.forEach((sm, i) => {
+      const h = Math.floor((dep + sm.t * 1000 * k - G.t0) / HOUR);
+      if(h < 0 || h >= G.hours) return;
+      let q = 0;
+      for(let j = 1; j < G.idx.length; j++) if(Math.abs(G.idx[j] - i) < Math.abs(G.idx[q] - i)) q = j;
+      if(G.pop[q][h] != null) ok++;
+    });
+    return ok >= samples.length * 0.9;
+  }
+  return {getKey, setKey, test, load, build, covers, at, usage, FREE, DAYS, stop: () => use().stop};
+})();
+
+/* ================= mapa de fundo do Google (Map Tiles API) =================
+   O Google exige que a rota calculada por ele apareça sobre um mapa dele, e não sobre o de outro fornecedor.
+   Com a chave e a Map Tiles API liberada, o fundo do mapa passa a ser o do Google. Se ela não abrir, o app
+   fica com o mapa e a rota do OpenStreetMap, e avisa. */
+API.gtiles = 'https://tile.googleapis.com';
+const GMap = (() => {
+  const KEY = 'tnc-gmap-v1';
+  let state = 'idle', err = '', cur = null;
+  /* estilo escuro (o "modo noturno" do próprio Google) */
+  const C = (f, e, c) => Object.assign({}, f ? {featureType: f} : {}, e ? {elementType: e} : {}, {stylers: [{color: c}]});
+  const NIGHT = [C('', 'geometry', '#242f3e'), C('', 'labels.text.stroke', '#242f3e'), C('', 'labels.text.fill', '#746855'),
+    C('administrative.locality', 'labels.text.fill', '#d59563'), C('poi', 'labels.text.fill', '#d59563'), C('poi.park', 'geometry', '#263c3f'),
+    C('poi.park', 'labels.text.fill', '#6b9a76'), C('road', 'geometry', '#38414e'), C('road', 'geometry.stroke', '#212a37'),
+    C('road', 'labels.text.fill', '#9ca5b3'), C('road.highway', 'geometry', '#746855'), C('road.highway', 'geometry.stroke', '#1f2835'),
+    C('road.highway', 'labels.text.fill', '#f3d19c'), C('transit', 'geometry', '#2f3948'), C('water', 'geometry', '#17263c'),
+    C('water', 'labels.text.fill', '#515c6d'), C('water', 'labels.text.stroke', '#17263c')];
+  /* só faz sentido quando há chave e a rota é pedida ao Google */
+  const want = () => { const t = Prefs.get().traf; return !!Goog.getKey() && !S.demo && !(t === 0 || t === '0' || t === false); };
+  async function open(dark){
+    const key = Goog.getKey(), tag = (dark ? 'd' : 'l') + ':' + key.slice(-8);
+    let store = {};
+    try{ store = JSON.parse(localStorage.getItem(KEY)) || {}; }catch(_){ /* sem armazenamento */ }
+    const c = store[tag];
+    if(c && c.token && c.exp > Date.now() / 1000 + 6 * 3600) return {token: c.token, exp: c.exp, dark};
+    const res = await fetch(`${API.gtiles}/v1/createSession?key=${encodeURIComponent(key)}`, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({mapType: 'roadmap', language: 'pt-BR', region: 'BR', scale: 'scaleFactor2x', highDpi: true}, dark ? {styles: NIGHT} : {}))});
+    let j = null;
+    try{ j = await res.json(); }catch(_){ /* corpo vazio */ }
+    if(!res.ok || !j || !j.session) throw new Error((j && j.error && j.error.message) || 'HTTP ' + res.status);
+    const exp = +j.expiry || (Date.now() / 1000 + 86400);
+    store[tag] = {token: j.session, exp};
+    try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(_){ /* sem armazenamento */ }
+    return {token: j.session, exp, dark};
+  }
+  /* o estilo de mapa para o MapLibre, com as imagens do Google; null quando não deu (aí vale o OpenStreetMap) */
+  async function style(dark){
+    if(!want()){ state = 'off'; cur = null; return null; }
+    try{
+      cur = await open(dark); state = 'ok'; err = '';
+      const q = `session=${encodeURIComponent(cur.token)}&key=${encodeURIComponent(Goog.getKey())}`;
+      return {version: 8, sources: {gmap: {type: 'raster', tiles: [`${API.gtiles}/v1/2dtiles/{z}/{x}/{y}?${q}`], tileSize: 256, maxzoom: 22}},
+        layers: [{id: 'gmap', type: 'raster', source: 'gmap'}]};
+    }catch(e){ state = 'err'; err = (e && e.message) || 'sem resposta'; cur = null; return null; }
+  }
+  /* o texto de direitos autorais para a área do mapa à vista */
+  async function copyright(b, zoom){
+    if(state !== 'ok' || !cur) return '';
+    try{
+      const u = `${API.gtiles}/tile/v1/viewport?session=${encodeURIComponent(cur.token)}&key=${encodeURIComponent(Goog.getKey())}&zoom=${Math.round(zoom)}` +
+        `&north=${b.getNorth().toFixed(4)}&south=${b.getSouth().toFixed(4)}&east=${b.getEast().toFixed(4)}&west=${b.getWest().toFixed(4)}`;
+      const j = await getJSON(u, {timeout: 10000});
+      return (j && j.copyright) || '';
+    }catch(_){ return ''; }
+  }
+  return {want, style, copyright, ok: () => state === 'ok', failed: () => state === 'err', err: () => err};
 })();
 
 /* ================= rota e trânsito: o caminho calculado pelo Google (Routes API) =================
@@ -2723,7 +2878,8 @@ const Traf = (() => {
   const usage = m => { try{ const u = JSON.parse(localStorage.getItem(UKEY[m])); return u && u.m === month() ? (u.n || 0) : 0; }catch(_){ return 0; } };
   const spend = m => { try{ localStorage.setItem(UKEY[m], JSON.stringify({m: month(), n: usage(m) + 1})); }catch(_){ /* sem armazenamento */ } };
   /* 2 (padrão quando há chave): rota do Google com o tempo e a intensidade do trânsito por trecho; 1: só o tempo; 0: rota do OpenStreetMap */
-  const mode = () => { if(!Goog.getKey()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
+  /* sem o mapa do Google no fundo, a rota do Google não pode ser usada: vale a do OpenStreetMap */
+  const mode = () => { if(!Goog.getKey() || GMap.failed()) return 0; const t = Prefs.get().traf; return (t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2; };
   const sec = v => parseFloat(String(v));
   const CODE = {NORMAL: 0, SLOW: 1, TRAFFIC_JAM: 2};
   /* quanto cada situação alonga o tempo do trecho em relação ao trânsito livre. É uma suposição do app para repartir
@@ -2975,6 +3131,11 @@ function buildVerdict(trip){
       if(pk.amt != null) sub += ` Se chover, em geral ${nf(pk.amt, 1)} mm/h${pk.hi > pk.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(pk.hi, 1)}` : ''}.`;
       if(e.regime === 'pancada') sub += ' É chuva isolada: atinge alguns pontos, por pouco tempo, e pode ser forte; o horário é menos certo.';
       else if(e.regime === 'continua') sub += ' É chuva generalizada: cobre uma área grande e dura mais.';
+    } else if(pk.src === 'g'){
+      sub = `No pior trecho, a chance de chuva é de ${pct(pk.pop)}, pelo Google.`;
+      if(pk.gqpf != null && pk.gqpf >= 0.1) sub += ` O volume esperado nessa hora é de ${nf(pk.gqpf, 1)} mm.`;
+      if(e.regime === 'pancada') sub += ' É chuva isolada: atinge alguns pontos, por pouco tempo, e pode ser forte; o horário é menos certo.';
+      else if(e.regime === 'continua') sub += ' É chuva generalizada: cobre uma área grande e dura mais.';
     } else if(pk.n > 1) sub = pk.wetN === pk.n ? `No pior trecho, os ${pk.n} modelos concordam.` : `No pior trecho, ${pk.wetN} de ${pk.n} modelos indicam chuva.`;
     const others = eps.slice(1);
     if(others.length && wetShare < 0.8){
@@ -3026,7 +3187,8 @@ function buildVerdict(trip){
   }
 
   /* a chance mostrada vem do Google: uma nota curta diz isso; a comparação trecho a trecho fica para quando o app usa os modelos */
-  if(trip.prim === 'g') notes.push({ic: 'info', html: 'A chance de chuva mostrada é a do Google. O conjunto de modelos, que costuma indicar mais chuva do que cai, aparece como linha tracejada no gráfico.'});
+  if(!S.demo && Goog.getKey() && GMap.failed()) notes.unshift({ic: 'info', html: 'Mapa e rota do OpenStreetMap, sem trânsito: o mapa do Google não abriu, e a rota dele só pode aparecer sobre o mapa dele. Para liberar, ative a “Map Tiles API” no projeto da chave (o passo a passo está no menu).'});
+  if(trip.prim === 'g' && !S.gOnly) notes.push({ic: 'info', html: 'A chance de chuva mostrada é a do Google. O conjunto de modelos, que costuma indicar mais chuva do que cai, aparece como linha tracejada no gráfico.'});
   const gmax = trip.prim === 'g' ? null : pts.reduce((b, p, i) => { const q = Goog.at(i, p.t); return q && (!b || q.pop > b.pop) ? {pop: q.pop, i, t: p.t} : b; }, null);
   let dis = null;
   pts.forEach((p, i) => {
@@ -3147,7 +3309,7 @@ function buildVerdict(trip){
   const lead = trip.dep - Date.now();
   if(trip.dep < Date.now() - 20 * MIN) notes.push({ic: 'info', html: 'Esse horário de saída já passou.'});
   if(lead > 3 * DAY) notes.push({ic: 'info', html: `Faltam ${Math.round(lead / DAY)} dias. A essa distância, a hora e o lugar da chuva ainda mudam bastante; confira de novo perto da saída.`});
-  if(!S.demo && (!S.wx.ens || !S.wx.ens.list.length)) notes.push({ic: 'info', html: 'As simulações de probabilidade não responderam agora; a chance mostrada vem só dos modelos detalhados.'});
+  if(!S.demo && !S.gOnly && (!S.wx.ens || !S.wx.ens.list.length)) notes.push({ic: 'info', html: 'As simulações de probabilidade não responderam agora; a chance mostrada vem só dos modelos detalhados.'});
   if(S.wx.beyond && S.wx.beyond.length) notes.push({ic: 'info', html: `${joinNames(S.wx.beyond.map(m => m.short))} ainda não ${S.wx.beyond.length > 1 ? 'alcançam' : 'alcança'} essa data.`});
   if(S.wx.failed && S.wx.failed.length) notes.push({ic: 'info', html: `${joinNames(S.wx.failed.map(m => m.short))} não ${S.wx.failed.length > 1 ? 'responderam' : 'respondeu'} agora; o resumo usa ${S.wx.list[0].id === FALLBACK_MODEL.id ? 'a combinação automática do Open-Meteo' : S.wx.list.length > 1 ? 'os outros' : 'o ' + S.wx.list[0].short}.`});
   if(!S.demo && navigator.onLine === false) notes.push({ic: 'info', html: 'Sem conexão: esta pode ser a última previsão guardada neste aparelho.'});
@@ -3165,7 +3327,7 @@ function factsText(trip){
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
   const stops = S.demo ? '' : viaText(S.vias);
-  const src = S.demo ? '' : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
+  const src = S.demo ? '' : S.gOnly ? `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Google.` : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }
 
@@ -3256,10 +3418,12 @@ function renderReadout(){
   else if(!all && c > 0) side = `${nf(v, 1)} mm/h`;
   /* a leitura do ponto, em linhas curtas com rótulo: nada de parágrafo corrido nem de texto cortado */
   const facts = [];
-  if(k) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
+  if(k && (p.ens || p.n)) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
   const gg = Goog.at(i, p.t);
   if(p.src === 'g'){
-    facts.push(['Fonte', `chance do Google${gg && gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg && gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
+    const gExtra = `${gg && gg.qpf != null ? `volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg && gg.th != null && gg.th >= 30 ? `${gg.qpf != null ? '; ' : ''}trovoada, ${Math.round(gg.th)}%` : ''}`;
+    if(p.popApp != null) facts.push(['Fonte', 'chance do Google' + (gExtra ? '; ' + gExtra : '')]);
+    else if(gExtra) facts.push(['Volume', gExtra]);
     if(p.popApp != null) facts.push(['Modelos', `${pct(p.popApp)} de chance pelo conjunto de modelos`]);
   } else if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
   if(k >= 2 && p.regime === 'pancada'){
@@ -3292,7 +3456,7 @@ function renderReadout(){
     `<div class="ro-where">${esc(where)}</div>` +
     `<div class="ro-cond"><i style="background:${dot}"></i><b>${cond}</b>${side ? `<span>${side}</span>` : ''}</div>` +
     `<dl class="ro-facts">${facts.map(f => `<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>` +
-    (gg ? '<details class="why"><summary>Por que o Google e os modelos diferem?</summary><p>' + (p.src === 'g'
+    (gg && p.popApp != null ? '<details class="why"><summary>Por que o Google e os modelos diferem?</summary><p>' + (p.src === 'g'
       ? 'A chance mostrada é a do Google: nas verificações feitas com este app, ela errou bem menos. A dos modelos é a parte das previsões de vários centros em que chove neste trecho e hora; ela costuma indicar mais chuva do que cai, porque os modelos acertam a região e o dia melhor do que o ponto e a hora.'
       : 'A chance mostrada é a do conjunto de modelos: a parte das previsões de vários centros em que chove neste trecho e hora. Ela costuma indicar mais chuva do que cai. A do Google é a chance que o Google publica para este ponto, já ajustada por ele.')
       + ' Nenhuma das duas é garantia: a verificação, depois da viagem, mostra qual chegou mais perto.</p><p>No volume, o app mostra quanto os modelos preveem quando chove. O Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor.</p></details>' : '');
@@ -3400,8 +3564,8 @@ function renderRuler(){
 
   /* gráfico de baixo: a força da chuva pelos modelos detalhados */
 
-  g += `<text class="t" x="${L}" y="${titleB}">${pts.some(p => p.ens) ? 'Se chover, quanta chuva (mm/h)' : 'Quanta chuva, em mm/h, pelos modelos'}</text>`;
-  g += legendRow([[catColor(2), 'em geral'], [catColor(2), 'nos casos mais fortes', 0.3]], L, titleB + LEG - 1, pw);
+  g += `<text class="t" x="${L}" y="${titleB}">${(S.gOnly || pts.some(p => p.ens)) ? 'Se chover, quanta chuva (mm/h)' : 'Quanta chuva, em mm/h, pelos modelos'}</text>`;
+  g += legendRow(S.gOnly ? [[catColor(2), 'estimativa pelo volume e pela chance do Google']] : [[catColor(2), 'em geral'], [catColor(2), 'nos casos mais fortes', 0.3]], L, titleB + LEG - 1, pw);
   /* o volume esperado pelo Google, como linha por cima das barras */
   const gVol = pts.map((p, i) => { const q = Goog.at(i, p.t); return q && q.qpf != null ? q.qpf : null; });
   if(gVol.some(v => v != null)) g += `<line x1="${L + pw - 58}" x2="${L + pw - 46}" y1="${titleB - 4}" y2="${titleB - 4}" stroke="${cssVar('--ink')}" stroke-width="2"/><text class="s" x="${L + pw}" y="${titleB}" text-anchor="end">Google</text>`;
@@ -3528,6 +3692,9 @@ function renderRuler(){
 
 /* ---------- quadro recolhido: os modelos detalhados, para quem quiser conferir ---------- */
 function renderModels(){
+  /* previsão toda do Google: a comparação entre modelos e o teste dos modelos não têm o que mostrar */
+  els.layout.classList.toggle('g-only', !!S.gOnly);
+  if(S.gOnly){ $('#models').hidden = true; return; }
   const box = $('#models'), el = $('#models-chart');
   if(!S.trip || !box) return;
   box.hidden = S.wx.list.length < 1 || !S.trip.pts.some(p => p.ens);     /* sem simulações, o gráfico principal já é o dos modelos */
@@ -3701,6 +3868,7 @@ function renderLayers(){
   $('#layer-chips').innerHTML = list.map(x => `<button type="button" role="radio" aria-checked="${x[0] === S.layer}" data-layer="${x[0]}">${x[1]}</button>`).join('');
   const k = (v, t) => `<span><i style="background:var(${v})"></i>${t}</span>`;
   const KEY = {
+    chuva: k('--dry', 'sem chuva') + CATS.slice(1).map(c => k(c.v, c.label)).join('') + '<span class="lk-note">cor mais apagada: chance menor</span>',
     vento: k('--dry', 'rajadas até 35 km/h') + k('--a1', '35 a 50') + k('--a2', '50 a 70') + k('--a3', '70 ou mais'),
     noite: k('--dry', 'dia') + k('--nightc', 'noite'),
     neblina: k('--dry', 'sem neblina') + k('--a2', 'neblina possível'),
@@ -3711,6 +3879,7 @@ function renderLayers(){
   };
   $('#layer-key').innerHTML = KEY[S.layer] || '';
   box.hidden = false;
+  MapCtl.credit();
 }
 function refreshExtras(){
   if(!S.trip) return;
@@ -3745,7 +3914,7 @@ const mqMobile = matchMedia('(max-width: 899px)');
 const isMobile = () => mqMobile.matches;
 
 const MapCtl = (() => {
-  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], altMk = [], picking = null, draft = null, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
+  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], altMk = [], picking = null, draft = null, gBase = false, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
   const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   /* a rota é sempre uma linha contínua, em cima da estrada. A cor é a força da chuva; quanto menor a chance,
      mais a cor se apaga, até o cinza de "seco" */
@@ -3785,7 +3954,7 @@ const MapCtl = (() => {
   };
   /* área livre do mapa: no celular, entre a barra de viagem e o painel */
   function pad(){
-    const chips = $('#layers').hidden ? 0 : 46 + ($('#layer-key').innerHTML ? 28 : 0);
+    const chips = $('#layers').hidden ? 0 : 46 + (($('#layer-key').offsetHeight || 0) ? $('#layer-key').offsetHeight + 6 : 0);
     if(!isMobile()) return {top: 40 + chips, right: 44, bottom: 46, left: 44};
     const vh = window.innerHeight, plan = $('#plan'), lay = $('#layout');
     const top = (plan.classList.contains('is-min') ? Math.min(plan.getBoundingClientRect().bottom, vh * 0.25) : 70) + ($('#banner').hidden ? 18 : 56) + chips;
@@ -3917,6 +4086,25 @@ const MapCtl = (() => {
     mk.you.setLngLat([s.lon, s.lat]).addTo(gl);
     mk.you.getElement().style.zIndex = '3';
   }
+  /* a pessoa aproximou ou moveu o mapa, e o caminho novo passa pela área à vista: o enquadramento fica como está.
+     Assim dá para fazer vários ajustes seguidos no mesmo ponto sem ter de voltar a ele. */
+  function holds(R){
+    if(!userMoved || !glReady || !R) return false;
+    try{
+      const b = gl.getBounds(), c = R.coords, step = Math.max(1, Math.floor(c.length / 500));
+      for(let i = 0; i < c.length; i += step) if(b.contains(c[i])) return true;
+    }catch(_){ /* sem mapa pronto */ }
+    return false;
+  }
+  /* no celular, o logotipo do Google fica logo abaixo das camadas e da legenda */
+  function placeCredit(){
+    const box = $('#glogo');
+    if(!box || box.hidden) return;
+    if(!isMobile()){ box.style.top = ''; return; }
+    const base = box.parentElement.getBoundingClientRect(), lay = $('#layers'), plan = $('#plan');
+    const y = (!lay.hidden ? lay.getBoundingClientRect().bottom : plan.classList.contains('is-min') ? plan.getBoundingClientRect().bottom : 70) - base.top + 8;
+    box.style.top = Math.round(y) + 'px';
+  }
   function fitGL(animate = true){
     const R = draft ? draft.alts[draft.i].route : S.route;
     if(!glReady || !R) { needFit = true; return; }
@@ -3927,10 +4115,27 @@ const MapCtl = (() => {
     try{ gl.fitBounds([[x0, y0], [x1, y1]], {padding: pad(), maxZoom: 14, duration: (animate && !reduceMotion()) ? 600 : 0}); }
     catch(_){ gl.fitBounds([[x0, y0], [x1, y1]], {padding: 30, maxZoom: 14, duration: 0}); }
   }
+  /* o fundo do mapa: o do Google, quando a rota é pedida a ele e a Map Tiles API está liberada; senão, o do OpenStreetMap */
+  async function baseStyle(){
+    const g = await GMap.style(isDark());
+    gBase = !!g;
+    return g || API.style[isDark() ? 'dark' : 'light'];
+  }
+  /* logotipo e direitos do Google sobre o mapa dele, como os termos pedem */
+  function gCredit(){
+    const box = $('#glogo'), img = $('#glogo-img');
+    box.hidden = !gBase;
+    if(!gBase) return;
+    placeCredit();
+    if(!img.getAttribute('src')){ img.onerror = () => { img.remove(); $('#glogo-text').textContent = 'Google  ' + $('#glogo-text').textContent; }; img.src = 'https://maps.gstatic.com/mapfiles/api-3/images/google_gray.svg'; }
+    clearTimeout(gCredit.t);
+    gCredit.t = setTimeout(async () => { const c = await GMap.copyright(gl.getBounds(), gl.getZoom()); if(c) $('#glogo-text').textContent = c; }, 1200);
+  }
   async function initGL(){
     await loadLib();
+    const st0 = await baseStyle();
     gl = new maplibregl.Map({
-      container: el, style: API.style[isDark() ? 'dark' : 'light'], center: [-49, -15], zoom: 2.7,
+      container: el, style: st0, center: [-49, -15], zoom: 2.7,
       attributionControl: false, cooperativeGestures: !isMobile(), dragRotate: false, pitchWithRotate: false, touchPitch: false,
       locale: {
         'CooperativeGesturesHandler.WindowsHelpText': 'Use Ctrl + rolagem para dar zoom no mapa',
@@ -3950,12 +4155,14 @@ const MapCtl = (() => {
       if(a && el.clientWidth < 560){ a.removeAttribute('open'); a.classList.remove('maplibregl-compact-show'); }
     });
     gl.on('style.load', () => {
-      glReady = true; clearTimeout(styleTimer);
+      glReady = true; clearTimeout(styleTimer); gCredit();
       ensureLayers(); pushGL(); markersGL();
       if(needFit) fitGL();
     });
     gl.on('click', e => {
+      const menuOpen = !$('#mapmenu').hidden;
       hideMenu();
+      if(menuOpen && !picking) return;                      /* com o menu aberto, um toque em qualquer ponto só o fecha */
       if(picking){ const cb = picking; picking = null; cb({lat: e.lngLat.lat, lon: e.lngLat.lng}); return; }
       /* toque numa rota alternativa (em cinza), longe da rota atual: passa a usá-la */
       const box = [[e.point.x - 9, e.point.y - 9], [e.point.x + 9, e.point.y + 9]];
@@ -3995,6 +4202,8 @@ const MapCtl = (() => {
     });
     window.addEventListener('mouseup', () => { if(pull){ pull = null; gl.getCanvas().style.cursor = ''; if(mk.handle) mk.handle.remove(); } });
     /* tocar e segurar (ou botão direito) num ponto do mapa: partir dali, parar ali ou chegar ali */
+    /* mexer no mapa com o mouse (arrastar ou girar a roda) também fecha o menu */
+    ['dragstart', 'zoomstart'].forEach(t => gl.on(t, e => { const o = e && e.originalEvent; if(o && !('touches' in o) && o.pointerType !== 'touch') hideMenu(); }));
     gl.on('contextmenu', e => { if(e.originalEvent) e.originalEvent.preventDefault(); showMenu(e.lngLat, e.point); });
     let lp = null, lp0 = null;
     gl.on('touchstart', e => {
@@ -4007,6 +4216,7 @@ const MapCtl = (() => {
     ['touchend', 'touchcancel', 'zoomstart'].forEach(t => gl.on(t, () => clearTimeout(lp)));
     gl.on('movestart', hideMenu);
     gl.on('error', () => { /* falhas de tile não interrompem o app */ });
+    gl.on('moveend', gCredit);
     /* enquanto a pessoa não mexer no mapa, a rota continua enquadrada quando o tamanho muda */
     ['dragstart', 'zoomstart'].forEach(t => gl.on(t, e => { if(e && e.originalEvent) userMoved = true; }));
     if('ResizeObserver' in window) new ResizeObserver(() => {
@@ -4105,19 +4315,31 @@ const MapCtl = (() => {
       if(S.samples) this.setTrip();
     },
     /* a posição do aparelho no mapa; o mapa acompanha, a menos que a pessoa tenha mexido nele há pouco */
-    me(lon, lat){
+    /* force: centraliza já (botão de mira), mesmo que a pessoa tenha mexido no mapa há pouco */
+    me(lon, lat, force){
       if(kind !== 'gl' || !glReady) return;
-      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); }); }
+      if(!mk.me){ mk.me = new maplibregl.Marker({element: mkEl('mk-me')}); gl.on('dragstart', () => { mk.meTouch = Date.now(); $('#recenter').setAttribute('aria-pressed', 'false'); }); }
       mk.me.setLngLat([lon, lat]).addTo(gl);
-      if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
+      if(force){ mk.meTouch = 0; gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 13), duration: 700}); $('#recenter').setAttribute('aria-pressed', 'true'); }
+      else if(!gl.isMoving() && Date.now() - (mk.meTouch || 0) > 20000) gl.easeTo({center: [lon, lat], zoom: Math.max(gl.getZoom(), 10.5), duration: 700});
     },
-    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
+    meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } $('#recenter').setAttribute('aria-pressed', 'false'); },
+    /* volta a acompanhar a posição já marcada no mapa */
+    follow(){ if(kind !== 'gl' || !glReady || !mk.me) return false; const p = mk.me.getLngLat(); this.me(p.lng, p.lat, true); return true; },
+    _gl(){ return gl; },
+    /* botão de enquadrar: volta a mostrar a rota inteira */
+    fitAll(){ if(kind !== 'gl' || !(draft || S.route)) return; userMoved = false; fitGL(true); },
+    credit(){ placeCredit(); },                       /* para os testes */
+    say(t){ note(t); clearTimeout(this._sayT); this._sayT = setTimeout(() => note(''), 6000); },
+    /* troca o fundo do mapa (Google ou OpenStreetMap) quando a chave ou a escolha da rota muda */
+    async restyle(){ if(kind !== 'gl') return; const st = await baseStyle(); glReady = false; try{ gl.setStyle(st); }catch(_){ /* mantém o estilo atual */ } },
     /* modo de escolha: o próximo toque no mapa devolve o ponto */
     canPick(){ return kind === 'gl' && glReady; },
     /* só para os testes: onde um ponto do mapa aparece na tela */
     _px(lon, lat){ if(kind !== 'gl' || !glReady) return null; const q = gl.project([lon, lat]), b = el.getBoundingClientRect(); return {x: b.left + q.x, y: b.top + q.y}; },
     /* mostra um caminho traçado e ainda não confirmado (ou volta ao normal, com null) */
-    setDraft(d){ draft = d; if(kind !== 'gl' || !glReady) return; pushGL(); markersGL(); if(d){ userMoved = false; fitGL(true); } },
+    /* refit: consulta nova, enquadra o caminho inteiro; num ajuste, o mapa fica onde a pessoa deixou (ver holds) */
+    setDraft(d, refit){ draft = d; $('#fitall').hidden = !(d || S.route); if(kind !== 'gl' || !glReady) return; pushGL(); markersGL(); if(d && (refit || !holds(d.alts[d.i].route))){ userMoved = false; fitGL(true); } },
     pick(cb){ picking = cb; hideMenu(); },
     hideMenu,
     async goLive(){
@@ -4126,9 +4348,9 @@ const MapCtl = (() => {
       const fresh = old.cloneNode(false); old.replaceWith(fresh); el = fresh; note('');
       try{ await initGL(); }catch(_){ initSketch('Sem mapa de fundo neste navegador'); }
     },
-    setTrip(){
-      userMoved = false;
-      if(kind === 'gl'){ pushGL(); if(glReady) markersGL(); requestAnimationFrame(() => fitGL(true)); }
+    setTrip(refit){
+      $('#fitall').hidden = !S.route;
+      if(kind === 'gl'){ pushGL(); if(glReady) markersGL(); if(refit || !holds(S.route)){ userMoved = false; requestAnimationFrame(() => fitGL(true)); } }
       else if(kind === 'sketch') drawSketch();
     },
     paint(){
@@ -4156,7 +4378,7 @@ const MapCtl = (() => {
       } else if(kind === 'sketch') drawSketch();
     },
     theme(){
-      if(kind === 'gl'){ glReady = false; try{ gl.setStyle(API.style[isDark() ? 'dark' : 'light']); }catch(_){ /* mantém o estilo atual */ } }
+      if(kind === 'gl') this.restyle();
       else if(kind === 'sketch') drawSketch();
     }
   };
@@ -4357,7 +4579,7 @@ function setDeparture(ms){
 }
 
 /* ---------- modo app: barra de viagem no alto e painel embaixo ---------- */
-const SHEETS = ['peek', 'half', 'full'];
+const SHEETS = ['mini', 'peek', 'half', 'full'];        /* mini: só o mapa, com uma linha de estado */
 function syncChrome(){
   if(els.plan.classList.contains('is-min')) document.documentElement.style.setProperty('--pill-h', Math.round(els.plan.getBoundingClientRect().height) + 'px');
   MapCtl.refit(false);
@@ -4382,7 +4604,7 @@ function setSheet(s){
   els.layout.dataset.sheet = s;
   $$('#sheetbar button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sheet === s)));
   if(s !== 'full') els.layout.scrollTop = 0;
-  requestAnimationFrame(() => { if(S.trip && s !== 'peek'){ renderRuler(); renderModels(); renderDepart(); } MapCtl.refit(true); });
+  requestAnimationFrame(() => { if(S.trip && s !== 'peek' && s !== 'mini'){ renderRuler(); renderModels(); renderDepart(); } if(!Live.on()) MapCtl.refit(true); });
 }
 /* leva o cursor a um ponto do trajeto e, no celular, abre o gráfico junto do mapa */
 /* computador: as abas do painel da direita */
@@ -4802,7 +5024,7 @@ async function plan(opts = {}){
     if(opts.auto || opts.live || opts.preferDist != null){
       await adopt(alts, i0, {from, to, vias, pins, profile, keep: opts.keep, live: opts.live});
       writeHash();
-    } else showDraft({from, to, vias, pins, profile, alts, i: i0});
+    } else showDraft({from, to, vias, pins, profile, alts, i: i0}, opts.keep);
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
@@ -4816,10 +5038,19 @@ async function adopt(alts, i, ctx){
   const alt = alts[i], route = alt.route;
   const samples = sampleRoute(route);
   if(route.google) route.scat = Traf.sampleCats(route, samples);
-  setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…');
-  const dep = readDepart();
-  const wx = await loadWeather(samples, dep, route.dur);
-  Object.assign(S, {from: ctx.from, to: ctx.to, vias: ctx.vias || [], routeMode: ctx.profile, alts, alt: i,
+  const dep = readDepart(), kk = 1 + S.slack;
+  /* com o Google como fonte, a previsão vem toda dele; os modelos só são consultados se ele não cobrir a viagem
+     (sem chave, além de 7 dias ou fora do ar) */
+  let G = null, gErr = '', gOnly = false, wx;
+  if(primGoogle()){
+    setBusy(true, 'Buscando a previsão do Google…');
+    try{ G = await Goog.build({samples, dep, arr: dep + route.dur * 1000 * kk, rid: 0}); }
+    catch(e){ gErr = (e && e.message) || 'sem resposta'; }
+    gOnly = Goog.covers(G, samples, dep, kk);
+  }
+  if(gOnly) wx = emptyWx();
+  else { setBusy(true, 'Buscando a previsão: 4 modelos e mais de cem cenários…'); wx = await loadWeather(samples, dep, route.dur); }
+  Object.assign(S, {from: ctx.from, to: ctx.to, vias: ctx.vias || [], routeMode: ctx.profile, alts, alt: i, gOnly,
     route, samples, wx, wxAt: Date.now(), wxDay: startOfDay(dep), places: [], urban: route.dist < 40000});
   S.extra = {relief: null, road: false};
   /* onde fica cada parada ao longo do caminho; e, numa rota que não é a recomendada, dois pontos de passagem
@@ -4828,15 +5059,10 @@ async function adopt(alts, i, ctx){
   S.pins = (ctx.pins || []).map(p => Object.assign({}, p, {d: snapDist(route, p)}));
   route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
-  /* com o Google como fonte principal, espera a previsão dele antes de mostrar o resultado, para os números não mudarem na tela */
-  if(primGoogle()){
-    S.departMs = readDepart(); S.trip = computeTrip(S.departMs);
-    setBusy(true, 'Buscando a previsão do Google…');
-    try{ await Goog.load(); }catch(e){ S.goog = {routeId: id, error: (e && e.message) || 'sem resposta'}; }
-  }
+  if(G){ G.routeId = id; S.goog = G; } else if(gErr) S.goog = {routeId: id, error: gErr};
   endDraft();
   recompute({focusWorst: true});
-  MapCtl.setTrip();
+  MapCtl.setTrip(!(ctx.keep || ctx.hold));
   if(!ctx.keep) showResult(); else minPlan(true);      /* consulta refeita a partir dos ajustes: a tela fica onde está */
   if(ctx.live) Live.rebase();
   namePlaces(id);
@@ -4873,12 +5099,13 @@ function renderDraft(){
     (R.gErr ? ` O Google não calculou a rota (${R.gErr}); este caminho é o do OpenStreetMap.` : '');
   $('#draft-cancel').hidden = !S.trip;
 }
-function showDraft(d){
+function showDraft(d, keep){
+  d.edit = !!keep;                 /* caminho vindo de um ajuste (e não de uma consulta nova): o mapa fica onde está, também ao confirmar */
   S.draft = d;
   els.layout.classList.add('drafting'); document.body.classList.add('drafting');
   if(isMobile()) setSheet('peek'); else setTab('resumo');
   renderDraft();
-  MapCtl.setDraft(d);
+  MapCtl.setDraft(d, !keep);
   minPlan(true);
 }
 function selectDraft(i){
@@ -4894,7 +5121,7 @@ async function confirmDraft(){
   hideError();
   let ok = false;
   setBusy(true, 'Buscando a previsão…');
-  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, pins: d.pins, profile: d.profile}); writeHash(); ok = true; }
+  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, pins: d.pins, profile: d.profile, hold: d.edit}); writeHash(); ok = true; }
   catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
 }
@@ -5029,13 +5256,15 @@ async function googRefresh(){
   }
   window.dispatchEvent(new Event('tnc-goog'));
   if(!S.trip) return;
+  /* só o Google estava em uso e ele não alcança mais a viagem: entram os modelos */
+  if(S.gOnly && !Goog.covers(S.goog && S.goog.routeId === id ? S.goog : null, S.samples, S.departMs, 1 + S.slack)){ await needModels(); return; }
   if(primGoogle()) recompute();       /* a chance mostrada depende do Google: refaz as contas, não só os desenhos */
   else { renderVerdict(); renderReadout(); renderRuler(); renderLegend(); renderList(); }
   Conf.record(S.trip);
 }
 
 /* a previsão carregada serve para o horário escolhido? (a consulta traz o dia da saída e mais dois) */
-const wxOk = () => !!S.wx && (startOfDay(readDepart()) === S.wxDay || (!S.demo && wxCovers(S.wx, readDepart(), S.route.dur)));
+const wxOk = () => !!S.wx && (S.gOnly || startOfDay(readDepart()) === S.wxDay || (!S.demo && wxCovers(S.wx, readDepart(), S.route.dur)));
 
 async function applyWhen(){
   if(!S.route) return;
@@ -5064,8 +5293,23 @@ async function applyWhen(){
 }
 
 /* acompanhamento: busca de novo os modelos e as simulações para os mesmos trechos, sem mexer na tela */
+/* o Google deixou de cobrir a viagem (a data mudou para além de 7 dias, por exemplo), ou a pessoa pediu a chance
+   dos modelos: busca os modelos, que estavam dispensados */
+async function needModels(){
+  if(!S.gOnly || S.busy || S.demo || !S.route) return;
+  const id = S.routeId, dep = readDepart();
+  setBusy(true, 'Buscando a previsão dos modelos…');
+  try{
+    const wx = await loadWeather(S.samples, dep, S.route.dur);
+    if(id !== S.routeId) return;
+    S.wx = wx; S.wxDay = startOfDay(dep); S.wxAt = Date.now(); S.gOnly = false;
+    recompute();
+  }catch(e){ showError(e); }
+  finally{ setBusy(false); }
+}
+
 async function refreshWeather(){
-  if(S.busy || S.demo || !S.route) return false;
+  if(S.busy || S.demo || !S.route || S.gOnly) return false;
   const id = S.routeId, dep = readDepart();
   const wx = await loadWeather(S.samples, dep, S.route.dur);
   if(id !== S.routeId) return false;
@@ -5181,7 +5425,7 @@ function initUI(){
   bar.addEventListener('pointerup', e => {
     if(gy == null) return;
     const dy = e.clientY - gy; gy = null;
-    if(Math.abs(dy) >= 28){ swiped = true; setSheet(SHEETS[clamp(SHEETS.indexOf(S.sheet) + (dy < 0 ? 1 : -1), 0, 2)]); }
+    if(Math.abs(dy) >= 28){ swiped = true; setSheet(SHEETS[clamp(SHEETS.indexOf(S.sheet) + (dy < 0 ? 1 : -1), 0, SHEETS.length - 1)]); }
   });
   bar.addEventListener('pointercancel', () => { gy = null; });
   bar.addEventListener('click', e => {
@@ -5217,6 +5461,33 @@ function initUI(){
   $('#alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) useAlt(+b.dataset.i); });
   $('#mapmenu').addEventListener('click', e => { const b = e.target.closest('button[data-act]'), m = $('#mapmenu'); if(!b) return; m.hidden = true; if(b.dataset.act === 'via') passAt(+m.dataset.lat, +m.dataset.lon); else if(b.dataset.act !== 'close') pickPoint(b.dataset.act, +m.dataset.lat, +m.dataset.lon); });
   $('#pick-cancel').addEventListener('click', endPick);
+  $('#fitall').addEventListener('click', () => MapCtl.fitAll());
+  /* com o painel recolhido, o acompanhamento pode ser encerrado ali mesmo */
+  $('#live-mini').addEventListener('click', e => { if(e.target.closest('#lm-stop')) Live.stop(); });
+  /* o menu do mapa some com um toque fora dele (na página ou no mapa) e com a tecla Esc */
+  document.addEventListener('pointerdown', e => { if(!e.target.closest('#mapmenu') && !e.target.closest('#map')) MapCtl.hideMenu(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') MapCtl.hideMenu(); });
+  /* versão e atualização */
+  $('#upd-ver').textContent = APP_VERSION || '?';
+  $('#upd-btn').addEventListener('click', async e => {
+    const st = $('#upd-status'), b = e.currentTarget;
+    if(b.dataset.ready){ st.textContent = 'Atualizando…'; Updater.apply(); return; }
+    b.disabled = true; st.textContent = 'Procurando…';
+    try{
+      const r = await Updater.check();
+      if(r.has){ st.textContent = `Há uma versão nova (${r.latest}). Atualizando…`; Updater.apply(); }
+      else st.textContent = `Este aparelho já está na versão mais recente (${APP_VERSION}).`;
+    }catch(err){ st.textContent = `Não consegui conferir agora (${(err && err.message) || 'sem resposta'}).`; }
+    b.disabled = false;
+  });
+  setTimeout(() => Updater.auto(), 5000);
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') Updater.auto(); });
+  /* botão de mira: volta o mapa para a posição da pessoa (e, no acompanhamento, retoma o seguir) */
+  $('#recenter').addEventListener('click', async () => {
+    if(MapCtl.follow()) return;
+    try{ const f = await locateNow(0); MapCtl.me(f.lon, f.lat, true); }
+    catch(e){ MapCtl.say((e && e.message) || 'Não consegui obter a sua localização agora.'); }
+  });
   $('#draft-go').addEventListener('click', confirmDraft);
   $('#draft-cancel').addEventListener('click', cancelDraft);
   $('#draft-alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) selectDraft(+b.dataset.i); });
@@ -5236,6 +5507,7 @@ function initUI(){
     if(!S.trip || S.demo || !S.wx){ el.textContent = ''; return; }
     const g = S.goog && S.goog.calls != null && S.goog.routeId === S.routeId ? ` Google: ${nf(S.goog.calls)} chamadas em ${S.goog.idx.length} pontos.` : '';
     const relief = S.extra && S.extra.relief ? S.extra.relief.pts.length : 0;
+    if(S.gOnly){ el.textContent = `Esta consulta tem ${S.samples.length} trechos. A previsão veio toda do Google${S.goog && S.goog.calls != null && S.goog.routeId === S.routeId ? `: ${nf(S.goog.calls)} chamadas em ${S.goog.idx.length} pontos` : ''}. Do Open-Meteo, só a altitude do caminho (cerca de ${nf(relief)} no limite gratuito de 10.000 por dia).`; return; }
     el.textContent = `Esta consulta tem ${S.samples.length} trechos. Open-Meteo: 7 pedidos, que valem cerca de ${nf((S.wx.cost || 0) + relief)} no limite gratuito de 10.000 por dia (os modelos detalhados em ${S.wx.detPts || S.samples.length} pontos, as simulações em ${S.wx.cells} células).${g}`;
   };
   $('#pref-step').value = String(Prefs.get().step);
@@ -5243,12 +5515,13 @@ function initUI(){
   $('#pref-step').addEventListener('change', e => { Prefs.set({step: +e.target.value}); if(S.route && !S.demo) plan({keep: true, auto: !S.draft}); });
   $('#pref-guse').addEventListener('change', e => { Prefs.set({guse: e.target.value}); S.goog = null; gkRefresh(); googRefresh(); });
   $('#pref-prim').value = Prefs.get().prim === 'app' ? 'app' : 'g';
-  $('#pref-prim').addEventListener('change', e => { Prefs.set({prim: e.target.value}); if(S.trip && !S.demo){ recompute(); googRefresh(); } });
+  $('#pref-prim').addEventListener('change', e => { Prefs.set({prim: e.target.value}); if(!S.trip || S.demo) return; if(e.target.value === 'app' && S.gOnly) needModels(); else { recompute(); googRefresh(); } });
   { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2); }
-  $('#pref-traf').addEventListener('change', e => { Prefs.set({traf: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
+  $('#pref-traf').addEventListener('change', async e => { Prefs.set({traf: +e.target.value}); await MapCtl.restyle(); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
   /* estado do trânsito, logo abaixo da escolha */
   window.addEventListener('tnc-goog', () => {
     const el = $('#gtraf-status'), R = S.route, md = Traf.mode();
+    if(Goog.getKey() && GMap.failed()){ el.textContent = `O mapa do Google não abriu (${GMap.err()}). O Google exige que a rota dele apareça sobre o mapa dele; por isso, por enquanto, o app usa o mapa e a rota do OpenStreetMap, sem trânsito. Para liberar: no Google Cloud, ative a “Map Tiles API” no mesmo projeto e inclua essa API nas restrições da chave.`; return; }
     if(!Goog.getKey()){ el.textContent = 'Sem chave do Google neste navegador: a rota é a do OpenStreetMap, sem trânsito.'; return; }
     if(!md){ el.textContent = 'Você escolheu a rota do OpenStreetMap, sem trânsito.'; return; }
     const sku = R && R.google ? R.sku : md, nUso = Traf.usage(sku);
@@ -5271,13 +5544,15 @@ function initUI(){
       await Goog.test();
       st.textContent = `Chave aceita: o Google respondeu. A chave não tem prazo. A linha dele aparece no gráfico de chance quando a viagem acontece nos próximos ${Goog.DAYS} dias.`;
       S.goog = null;
+      await MapCtl.restyle();
       if(S.route && !S.demo && Traf.mode() && !S.route.google) plan({keep: true}); else await googRefresh();
     }catch(e){ st.textContent = `O Google recusou ou não respondeu (${(e && e.message) || 'sem resposta'}). Confira se a chave foi copiada inteira.`; }
   });
   $('#gkey-clear').addEventListener('click', () => {
     Goog.setKey(''); S.goog = null; gkRefresh();
     $('#gkey-status').textContent = 'Chave removida deste aparelho.';
-    if(S.trip){ renderVerdict(); renderReadout(); renderRuler(); renderLegend(); }
+    /* sem a chave, o mapa e a rota voltam a ser os do OpenStreetMap */
+    MapCtl.restyle().then(() => { if(S.route && !S.demo) plan({keep: true}); });
   });
   /* conferência: comparar as previsões guardadas com a chuva observada por satélite */
   const confBusy = (on, msg) => { $('#conf-run').disabled = on; $('#conf-retro').disabled = on; if(msg != null) $('#conf-status').textContent = msg; };
@@ -5420,7 +5695,7 @@ async function boot(){
   initUI();
   const live = await probe();
   if(live){
-    S.live = true; MapCtl.init(true);
+    S.live = true; await MapCtl.init(true);        /* espera o mapa: é ele que diz se o fundo do Google abriu */
     if(!S.route && !S.busy && readHash()) plan({auto: true});        /* abriu por um favorito: já mostra a viagem */
     else if(!S.route && !S.busy && !els.from.value.trim() && location.protocol === 'https:' && 'geolocation' in navigator){
       /* como nos apps de mapa, a partida começa como a sua localização; a posição só é pedida ao consultar,
@@ -5431,6 +5706,48 @@ async function boot(){
   }
   else if(!S.route && !S.busy) enterDemo();
 }
+/* ================= atualização do app =================
+   O app instalado é esta mesma página: quando sai uma versão nova, basta recarregar, sem instalar de novo.
+   O app confere sozinho ao abrir e ao voltar para a tela. Sem viagem na tela, já recarrega; com viagem, avisa no menu. */
+const APP_VERSION = ((document.querySelector('meta[name="app-version"]') || {}).content || '').trim();
+const Updater = (() => {
+  let last = 0;
+  const num = v => String(v).split('.').map(x => parseInt(x, 10) || 0);
+  const newer = (a, b) => { const A = num(a), B = num(b); for(let i = 0; i < Math.max(A.length, B.length); i++){ if((A[i] || 0) !== (B[i] || 0)) return (A[i] || 0) > (B[i] || 0); } return false; };
+  const page = () => location.href.split('#')[0];
+  /* lê a página publicada, sem passar por cópia guardada, e compara o número da versão */
+  async function check(){
+    if(!/^https?:$/.test(location.protocol)) throw new Error('o app está aberto como arquivo');
+    const res = await fetch(page(), {cache: 'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const m = /<meta name="app-version" content="([^"]+)"/.exec(await res.text());
+    last = Date.now();
+    const latest = m ? m[1].trim() : '';
+    return {latest, has: !!latest && !!APP_VERSION && newer(latest, APP_VERSION)};
+  }
+  async function apply(){
+    try{ if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); } }catch(_){ /* segue */ }
+    try{ await fetch(page(), {cache: 'reload'}); }catch(_){ /* segue */ }
+    location.reload();
+  }
+  function mark(v){
+    document.body.classList.add('has-upd');
+    const st = $('#upd-status'), b = $('#upd-btn');
+    if(st) st.textContent = `Há uma versão nova (${v}). Toque em “Atualizar agora”; a viagem na tela será consultada de novo.`;
+    if(b){ b.textContent = 'Atualizar agora'; b.dataset.ready = '1'; }
+  }
+  async function auto(){
+    if(Date.now() - last < 20 * MIN || navigator.onLine === false) return;
+    try{
+      const r = await check();
+      if(!r.has) return;
+      const idle = !S.route && !S.draft && !S.busy && !Live.on() && !els.to.value.trim() && !document.querySelector('input:focus, textarea:focus');
+      if(idle) apply(); else mark(r.latest);
+    }catch(_){ /* sem rede agora: confere na próxima */ }
+  }
+  return {check, apply, auto, mark, newer};
+})();
+
 /* ================= acompanhamento: onde estou e o que vem pela frente =================
    Usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho traçado;
    a hora de cada trecho à frente passa a contar a partir de agora, e não do horário planejado.
@@ -5479,8 +5796,11 @@ const Live = (() => {
     if(single && p.klass >= 2) return 'pista simples com chuva ' + KLASS[p.klass];
     return '';
   }
+  /* a linha de estado que aparece quando o painel está recolhido (botão "Mapa") */
+  const setMini = html => { const m = $('#live-mini'); if(m){ m.hidden = !html; m.innerHTML = html || ''; } };
   function render(){
     const box = $('#live'), btn = $('#live-btn');
+    if(!on() || !last || !S.trip) setMini(S.trip ? `<b>${esc($('#v-head').textContent)}</b>` : '');
     btn.hidden = !S.trip || !!S.demo;
     $('#swap-btn').hidden = !S.trip || !!S.demo;
     btn.setAttribute('aria-pressed', String(on()));
@@ -5513,17 +5833,18 @@ const Live = (() => {
     const ups = [];
     if(S.route.google && S.route.drive) ups.push(`trânsito às ${hhmm(S.route.liveAt || S.route.dep)}`);
     if(S.goog && S.goog.pop && S.goog.routeId === S.routeId) ups.push(`chuva pelo Google às ${hhmm(S.goog.when)}`);
-    if(S.wxAt) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    if(S.wxAt && !S.gOnly) ups.push(`modelos às ${hhmm(S.wxAt)}`);
+    setMini(`<button type="button" class="lm-stop" id="lm-stop">Parar</button><b>Agora:</b> ${esc(perto(pts, i))}, km ${nf(Math.round(last.sp.d / 1000))} de ${nf(Math.round(S.route.dist / 1000))}. Chegada prevista às ${hhmm(trip.arr)}.` + (alert ? `<span class="lm-alert">${esc(alert)}</span>` : ''));
     if(ups.length) h += `<p class="live-calm">Atualizado: ${ups.join('; ')}.</p>`;
     if(note) h += `<p class="live-calm">${esc(note)}</p>`;
     box.innerHTML = h;
   }
   function fix(pos){
     if(!S.route || !S.trip || !on()) return;
-    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now();
+    const lon = pos.coords.longitude, lat = pos.coords.latitude, sp = snap(lon, lat), now = Date.now(), first = !last;
     last = {lon, lat, acc: pos.coords.accuracy, sp, at: now}; msg = '';
     lastFix = {lat, lon, at: now};
-    MapCtl.me(lon, lat);
+    MapCtl.me(lon, lat, first);
     /* o trecho em que estou passa a ser "agora": desloca o horário de saída, no máximo uma vez por minuto */
     const depEff = now - sp.t * 1000 * (1 + S.slack);
     const gap = Math.abs(depEff - S.departMs);           /* diferença entre o relógio da viagem e a posição real */
@@ -5584,7 +5905,7 @@ const Live = (() => {
         try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ if(primGoogle()) recompute(); else { renderVerdict(); renderReadout(); renderRuler(); renderList(); } } }
         catch(e){ note = `Não deu para atualizar a chuva pelo Google agora (${(e && e.message) || 'sem resposta'}).`; }
       }
-      if(now - (S.wxAt || 0) > EVERY.wx){
+      if(!S.gOnly && now - (S.wxAt || 0) > EVERY.wx){
         try{ await refreshWeather(); }
         catch(e){ S.wxAt = now - EVERY.wx + 20 * MIN; note = 'Não deu para atualizar os modelos agora; o app tenta de novo em 20 minutos.'; }
       }
@@ -5607,6 +5928,7 @@ const Live = (() => {
     due = {traf: 0, goog: (S.goog && S.goog.when) || 0, replan: 0};
     watch = navigator.geolocation.watchPosition(fix, fail, {enableHighAccuracy: true, maximumAge: 5000, timeout: 30000});
     timer = setInterval(tick, EVERY.tick);
+    if(isMobile()) setSheet('mini');           /* no celular, o painel recolhe para o mapa e a posição ficarem à vista */
     keepAwake(); render();
   }
   function stop(keepMsg){
@@ -5625,7 +5947,7 @@ const Live = (() => {
 })();
 
 /* acesso para testes e diagnóstico */
-window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers, MapCtl, Pins};
+window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers, MapCtl, Pins, Updater, GMap};
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
