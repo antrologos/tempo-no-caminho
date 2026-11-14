@@ -356,7 +356,7 @@ function sliceRoute(route, tA, tB){
 
 /* preferências guardadas neste aparelho: de quantos em quantos minutos de viagem vai um trecho, e como usar o Google */
 const Prefs = (() => {
-  const KEY = 'tnc-prefs-v1', DEF = {step: 7, guse: 'eco'};
+  const KEY = 'tnc-prefs-v1', DEF = {step: 7, guse: 'eco', prim: 'g'};
   const get = () => { try{ return Object.assign({}, DEF, JSON.parse(localStorage.getItem(KEY)) || {}); }catch(_){ return Object.assign({}, DEF); } };
   const set = p => { try{ localStorage.setItem(KEY, JSON.stringify(Object.assign(get(), p))); }catch(_){ /* sem armazenamento */ } };
   return {get, set};

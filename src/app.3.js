@@ -1087,6 +1087,12 @@ async function adopt(alts, i, ctx){
   S.pins = (ctx.pins || []).map(p => Object.assign({}, p, {d: snapDist(route, p)}));
   route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
+  /* com o Google como fonte principal, espera a previsão dele antes de mostrar o resultado, para os números não mudarem na tela */
+  if(primGoogle()){
+    S.departMs = readDepart(); S.trip = computeTrip(S.departMs);
+    setBusy(true, 'Buscando a previsão do Google…');
+    try{ await Goog.load(); }catch(e){ S.goog = {routeId: id, error: (e && e.message) || 'sem resposta'}; }
+  }
   endDraft();
   recompute({focusWorst: true});
   MapCtl.setTrip();
@@ -1194,12 +1200,12 @@ function renderAlts(){
   $('#alts-key').hidden = S.demo || !S.alts || S.alts.length < 2 || !S.trip;
   if(S.demo || !S.alts || S.alts.length < 2 || !S.trip){ box.hidden = true; box.innerHTML = ''; return; }
   const k = 1 + S.slack, best = Math.min(...S.alts.filter(a => !a.stale).map(a => a.route.dur));
-  if(S.alts[S.alt] && S.pAnyNow != null) S.alts[S.alt].stat = S.pAnyNow;
+  if(S.alts[S.alt] && S.pAnyNow != null){ S.alts[S.alt].stat = S.pAnyNow; S.alts[S.alt].statLabel = S.pAnyLabel; }
   box.hidden = false;
   box.innerHTML = S.alts.map((a, i) => `<button type="button" class="alt" data-i="${i}" aria-pressed="${i === S.alt}">` + (a.stale
     ? `<b>Outro caminho</b><span>${esc(kmText(a.route.dist))}${a.route.desc ? ', ' + esc(a.route.desc) : ''}</span><span>toque para refazer com o novo horário</span></button>`
     : `<b>${durText(a.route.dur * k)}</b><span>${esc(kmText(a.route.dist))}${a.route.desc ? ', ' + esc(a.route.desc) : ''}</span>` +
-      `<span>${a.route.dur === best ? 'a mais rápida' : `${minText((a.route.dur - best) * k / 60)} a mais`}${a.stat != null ? `; chuva no caminho: ${pct(a.stat)}` : '; toque para ver a previsão'}</span></button>`)).join('');
+      `<span>${a.route.dur === best ? 'a mais rápida' : `${minText((a.route.dur - best) * k / 60)} a mais`}${a.stat != null ? `; ${a.statLabel || 'chuva no caminho'}: ${pct(a.stat)}` : '; toque para ver a previsão'}</span></button>`)).join('');
 }
 
 /* ---------- pontos marcados no mapa ---------- */
@@ -1282,7 +1288,8 @@ async function googRefresh(){
   }
   window.dispatchEvent(new Event('tnc-goog'));
   if(!S.trip) return;
-  renderVerdict(); renderReadout(); renderRuler(); renderLegend(); renderList();
+  if(primGoogle()) recompute();       /* a chance mostrada depende do Google: refaz as contas, não só os desenhos */
+  else { renderVerdict(); renderReadout(); renderRuler(); renderLegend(); renderList(); }
   Conf.record(S.trip);
 }
 
@@ -1494,6 +1501,8 @@ function initUI(){
   $('#pref-guse').value = Prefs.get().guse;
   $('#pref-step').addEventListener('change', e => { Prefs.set({step: +e.target.value}); if(S.route && !S.demo) plan({keep: true, auto: !S.draft}); });
   $('#pref-guse').addEventListener('change', e => { Prefs.set({guse: e.target.value}); S.goog = null; gkRefresh(); googRefresh(); });
+  $('#pref-prim').value = Prefs.get().prim === 'app' ? 'app' : 'g';
+  $('#pref-prim').addEventListener('change', e => { Prefs.set({prim: e.target.value}); if(S.trip && !S.demo){ recompute(); googRefresh(); } });
   { const t = Prefs.get().traf; $('#pref-traf').value = String((t === 0 || t === '0' || t === false) ? 0 : (t === 1 || t === '1' || t === true) ? 1 : 2); }
   $('#pref-traf').addEventListener('change', e => { Prefs.set({traf: +e.target.value}); if(S.route && !S.demo) plan({keep: true}); else window.dispatchEvent(new Event('tnc-goog')); });
   /* estado do trânsito, logo abaixo da escolha */
@@ -1831,7 +1840,7 @@ const Live = (() => {
       }
       if(Goog.getKey() && now - due.goog > EVERY.goog){
         due.goog = now;
-        try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ renderVerdict(); renderReadout(); renderRuler(); renderList(); } }
+        try{ const g = await Goog.load({from: here(), force: true}); if(g && g.pop && S.trip){ if(primGoogle()) recompute(); else { renderVerdict(); renderReadout(); renderRuler(); renderList(); } } }
         catch(e){ note = `Não deu para atualizar a chuva pelo Google agora (${(e && e.message) || 'sem resposta'}).`; }
       }
       if(now - (S.wxAt || 0) > EVERY.wx){

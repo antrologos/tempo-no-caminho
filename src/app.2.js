@@ -57,8 +57,8 @@ function buildVerdict(trip){
     const what = `${cap(rainPhrase(e.cat, pk.amt))} ${KLASS[Math.max(2, e.k)]}`;
     head = `${what} ${wetShare >= 0.8 ? 'em quase todo o caminho' : spanText(pts, e)}.`;
     if(pk.ens){
-      sub = `No pior trecho, a chance de chuva é de ${pct(pk.pop)}.`;
-      const hs = histText(pk);
+      sub = `No pior trecho, a chance de chuva é de ${pct(pk.pop)}${pk.src === 'g' ? ', pelo Google' : ''}.`;
+      const hs = pk.src === 'g' ? '' : histText(pk);
       if(hs) sub += ' ' + hs;
       if(pk.amt != null) sub += ` Se chover, em geral ${nf(pk.amt, 1)} mm/h${pk.hi > pk.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(pk.hi, 1)}` : ''}.`;
       if(e.regime === 'pancada') sub += ' É chuva isolada: atinge alguns pontos, por pouco tempo, e pode ser forte; o horário é menos certo.';
@@ -77,14 +77,20 @@ function buildVerdict(trip){
       sub = `Há uma chance pequena${p.pop != null && p.pop >= 0.01 ? ` (${pct(p.pop)})` : ''} de ${rainPhrase(p.catIf || 1, p.amt)} ${perto(pts, p.i)}, ${porVolta(p.t)}.`;
     } else {
       head = 'Caminho seco do começo ao fim.';
-      sub = et ? 'Nenhum trecho passa de 10% de chance de chuva.' : (nM > 1 ? `Os ${nM} modelos concordam.` : '');
+      sub = (et || trip.gt) ? `Nenhum trecho passa de 10% de chance de chuva${trip.prim === 'g' ? ', pelo Google' : ''}.` : (nM > 1 ? `Os ${nM} modelos concordam.` : '');
     }
   }
 
   /* as chances da viagem inteira */
-  if(et){
+  if(trip.gt){
+    const gt = trip.gt;
+    chips.push({v: pct(gt.pMax), l: 'é a maior chance de chuva num trecho'});
+    chips.push({v: gt.km30 >= 500 ? kmText(gt.km30) : '0 km', l: 'com 30% de chance ou mais'});
+    chips.push({v: `${Math.round(gt.expMin)} min`, l: 'de chuva esperados no caminho'});
+    S.pAnyNow = gt.pMax; S.pAnyLabel = 'maior chance de chuva';
+  } else if(et){
     chips.push({v: pct(et.pAny), l: 'de chance de chuva no caminho'});
-    S.pAnyNow = et.pAny;
+    S.pAnyNow = et.pAny; S.pAnyLabel = 'chuva no caminho';
     chips.push({v: pct(et.pMod), l: 'de chance de moderada ou forte'});
     if(et.minQ90 >= 1) chips.push({v: `${Math.round(et.minMean)} min`, l: `de chuva em média (de ${Math.round(et.minQ10)} a ${Math.round(et.minQ90)})`});
     if(et.pHeavy >= 0.05) notes.push({ic: 'rain-heavy', sign: true, html: `Em ${pct(et.pHeavy)} das previsões, a chuva chega a forte em algum ponto do caminho.`});
@@ -107,11 +113,12 @@ function buildVerdict(trip){
     }
   }
 
-  /* a segunda fonte, quando há chave: o que o Google diz para o mesmo caminho */
-  const gmax = pts.reduce((b, p, i) => { const q = Goog.at(i, p.t); return q && (!b || q.pop > b.pop) ? {pop: q.pop, i, t: p.t} : b; }, null);
+  /* a chance mostrada vem do Google: uma nota curta diz isso; a comparação trecho a trecho fica para quando o app usa os modelos */
+  if(trip.prim === 'g') notes.push({ic: 'info', html: 'A chance de chuva mostrada é a do Google. O conjunto de modelos, que costuma indicar mais chuva do que cai, aparece como linha tracejada no gráfico.'});
+  const gmax = trip.prim === 'g' ? null : pts.reduce((b, p, i) => { const q = Goog.at(i, p.t); return q && (!b || q.pop > b.pop) ? {pop: q.pop, i, t: p.t} : b; }, null);
   let dis = null;
   pts.forEach((p, i) => {
-    const q = Goog.at(i, p.t);
+    const q = trip.prim === 'g' ? null : Goog.at(i, p.t);
     if(!q || p.pop == null) return;
     const d = Math.abs(p.pop - q.pop);
     if(d >= 0.3 && Math.max(p.pop, q.pop) >= 0.3 && (!dis || d > dis.d)) dis = {d, i, t: p.t, app: p.pop, g: q.pop};
@@ -120,6 +127,7 @@ function buildVerdict(trip){
     notes.unshift({ic: 'info', sign: true, html: `As duas fontes divergem ${esc(perto(pts, dis.i))}, ${porVolta(dis.t)}: o app indica ${pct(dis.app)} de chance de chuva e o Google, ${pct(dis.g)}. A verificação mostra depois qual ficou mais próxima.`});
     alerts.push({ic: 'info', sign: true, i: dis.i, text: `Google indica ${pct(dis.g)}`});
   } else if(gmax) notes.push({ic: 'info', html: gmax.pop >= 0.1 ? `Pelo Google, a maior chance de chuva no caminho é de ${pct(gmax.pop)}, ${esc(perto(pts, gmax.i))}, ${porVolta(gmax.t)}. As duas fontes estão próximas.` : 'Pelo Google, o caminho fica praticamente seco, como na previsão do app.'});
+  else if(trip.prim === 'g'){ /* já dito acima */ }
   else if(S.goog && S.goog.routeId === S.routeId && S.goog.skip === 'longe') notes.push({ic: 'info', html: `A previsão do Google só entra quando a viagem acontece nos próximos ${Goog.DAYS} dias.`});
   else if(S.goog && S.goog.routeId === S.routeId && S.goog.error) notes.push({ic: 'info', html: /limite mensal/.test(S.goog.error) ? 'O app interrompeu as consultas ao Google neste mês, para não passar do limite sem cobrança.' : `O Google não respondeu agora (${esc(S.goog.error)}).`});
 
@@ -338,7 +346,10 @@ function renderReadout(){
   const facts = [];
   if(k) facts.push(['Se chover', `em geral ${nf(p.amt, 1)} mm/h${p.hi > p.amt + 0.3 ? `; nos casos mais fortes, passa de ${nf(p.hi, 1)}` : ''}`]);
   const gg = Goog.at(i, p.t);
-  if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
+  if(p.src === 'g'){
+    facts.push(['Fonte', `chance do Google${gg && gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg && gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
+    if(p.popApp != null) facts.push(['Modelos', `${pct(p.popApp)} de chance pelo conjunto de modelos`]);
+  } else if(gg) facts.push(['Google', `${pct(gg.pop)} de chance de chuva${gg.qpf != null ? `; volume esperado na hora: ${nf(gg.qpf, 1)} mm` : ''}${gg.th != null && gg.th >= 30 ? `; trovoada, ${Math.round(gg.th)}%` : ''}`]);
   if(k >= 2 && p.regime === 'pancada'){
     const rw = riskWindow(i, p.t);
     facts.push(['Tipo', `chuva isolada${rw && rw.hours >= 2 ? `; neste ponto, o período de risco vai ${dasAs(rw.from, rw.to)}` : ''}`]);
@@ -369,7 +380,10 @@ function renderReadout(){
     `<div class="ro-where">${esc(where)}</div>` +
     `<div class="ro-cond"><i style="background:${dot}"></i><b>${cond}</b>${side ? `<span>${side}</span>` : ''}</div>` +
     `<dl class="ro-facts">${facts.map(f => `<div><dt>${f[0]}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl>` +
-    (gg ? '<details class="why"><summary>Por que o app e o Google diferem?</summary><p>A chance do app é a parte das previsões de vários centros em que chove neste trecho e hora. Ela ainda não é ajustada pelas chuvas observadas e costuma sair alta. A do Google é a chance que o Google publica para este ponto, já ajustada por ele. Nenhuma das duas é garantia: só a verificação, depois da viagem, mostra qual chegou mais perto neste caminho.</p><p>No volume, o app mostra quanto os modelos preveem quando chove. O Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor.</p></details>' : '');
+    (gg ? '<details class="why"><summary>Por que o Google e os modelos diferem?</summary><p>' + (p.src === 'g'
+      ? 'A chance mostrada é a do Google: nas verificações feitas com este app, ela errou bem menos. A dos modelos é a parte das previsões de vários centros em que chove neste trecho e hora; ela costuma indicar mais chuva do que cai, porque os modelos acertam a região e o dia melhor do que o ponto e a hora.'
+      : 'A chance mostrada é a do conjunto de modelos: a parte das previsões de vários centros em que chove neste trecho e hora. Ela costuma indicar mais chuva do que cai. A do Google é a chance que o Google publica para este ponto, já ajustada por ele.')
+      + ' Nenhuma das duas é garantia: a verificação, depois da viagem, mostra qual chegou mais perto.</p><p>No volume, o app mostra quanto os modelos preveem quando chove. O Google informa o volume esperado na hora, que já desconta a chance de não chover, e por isso costuma ser menor.</p></details>' : '');
 }
 
 /* ---------- a régua do trajeto: hora em cima, lugar embaixo.
@@ -442,31 +456,34 @@ function renderRuler(){
 
   /* gráfico de cima: em quantos simulações chove (claro), chove moderado ou mais (médio) e chove forte (escuro) */
   if(hasPop){
-    const gLine = pts.some((p, i) => Goog.at(i, p.t));
-    g += `<text class="t" x="${L}" y="${titleA}">${nEns ? `Chance de chuva${Calib.active() ? ' ajustada' : ''}` : 'Chance de chuva, pelos modelos detalhados'}</text>`;
+    /* com o Google como fonte principal, as barras são a chance dele e a linha tracejada é a do conjunto de modelos */
+    const gMode = pts.some(p => p.src === 'g');
+    const gLine = gMode ? pts.some(p => p.src === 'g' && p.popApp != null) : pts.some((p, i) => Goog.at(i, p.t));
+    const gDash = gMode ? ' stroke-dasharray="5 3"' : '';
+    g += `<text class="t" x="${L}" y="${titleA}">${gMode ? 'Chance de chuva, pelo Google' : nEns ? `Chance de chuva${Calib.active() ? ' ajustada' : ''}` : 'Chance de chuva, pelos modelos detalhados'}</text>`;
     /* a linha do Google, explicada na ponta direita do título */
-    if(gLine) g += `<line x1="${L + pw - 58}" x2="${L + pw - 46}" y1="${titleA - 4}" y2="${titleA - 4}" stroke="${cssVar('--ink')}" stroke-width="2"/><text class="s" x="${L + pw}" y="${titleA}" text-anchor="end">Google</text>`;
+    if(gLine) g += `<line x1="${L + pw - (gMode ? 66 : 58)}" x2="${L + pw - (gMode ? 50 : 46)}" y1="${titleA - 4}" y2="${titleA - 4}" stroke="${cssVar('--ink')}" stroke-width="2"${gDash}/><text class="s" x="${L + pw}" y="${titleA}" text-anchor="end">${gMode ? 'modelos' : 'Google'}</text>`;
     [0, 0.5, 1].forEach(v => {
       const yy = Math.round(baseA - v * hA) + 0.5;
       g += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${L + pw}" y1="${yy}" y2="${yy}"/><text x="${L - 7}" y="${yy + 4}" text-anchor="end">${v * 100}%</text>`;
     });
-    g += legendRow([[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
+    g += legendRow(gMode ? [[r1, 'chance de chuva no trecho']] : [[r1, 'qualquer chuva'], [r2, 'moderada ou mais'], [r3, 'forte']], L, titleA + LEG - 1, pw);
     const bar = (i, f, col) => f > 0.004 ? `<rect x="${xa(i)}" y="${f1(baseA - f * hA)}" width="${bwid(i)}" height="${f1(f * hA)}" fill="${col}"/>` : '';
     for(let i = 0; i < n; i++){
       const p = pts[i];
       if(p.pop == null){ g += `<rect x="${xa(i)}" y="${baseA - 2}" width="${bwid(i)}" height="2" fill="${none}"/>`; continue; }
       g += bar(i, p.pop, r1);
-      if(p.ens) g += bar(i, p.ens.p2, r2) + bar(i, p.ens.p6, r3);
+      if(p.ens && p.src !== 'g') g += bar(i, p.ens.p2, r2) + bar(i, p.ens.p6, r3);
     }
-    /* a chance pelo Google, como linha por cima das barras */
+    /* a outra fonte, como linha por cima das barras: os modelos (tracejada) quando o Google é a principal; senão, o Google */
     let gd = '', pen = false;
     pts.forEach((p, i) => {
-      const gg = Goog.at(i, p.t);
-      if(!gg){ pen = false; return; }
-      gd += (pen ? 'L' : 'M') + f1(clamp(X(p.t), L, L + pw)) + ' ' + f1(baseA - gg.pop * hA);
+      const lv = gMode ? (p.src === 'g' ? p.popApp : null) : (q => q ? q.pop : null)(Goog.at(i, p.t));
+      if(lv == null){ pen = false; return; }
+      gd += (pen ? 'L' : 'M') + f1(clamp(X(p.t), L, L + pw)) + ' ' + f1(baseA - lv * hA);
       pen = true;
     });
-    if(gd) g += `<path d="${gd}" fill="none" stroke="${cssVar('--surface')}" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/><path d="${gd}" fill="none" stroke="${cssVar('--ink')}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if(gd) g += `<path d="${gd}" fill="none" stroke="${cssVar('--surface')}" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/><path d="${gd}" fill="none" stroke="${cssVar('--ink')}" stroke-width="${gMode ? 1.6 : 2}"${gDash} stroke-linejoin="round" stroke-linecap="round"/>`;
   }
 
   /* gráfico de baixo: a força da chuva pelos modelos detalhados */
@@ -587,7 +604,8 @@ function renderRuler(){
   /* as cores das barras estão explicadas dentro do gráfico; aqui ficam só as faixas extras */
   $('#ruler-cap').innerHTML = (
     (nEns ? `<br><span>Chance calculada com ${nEns + nDet} previsões combinadas.</span>` : '') +
-    (hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura: Google. Em cima, a chance de chuva; embaixo, o volume esperado na hora, já descontada a chance de não chover.</span>` : '') +
+    (hasPop && pts.some(p => p.src === 'g') ? '<br><span>Em cima: as barras são a chance de chuva pelo Google; a linha tracejada é a do conjunto de modelos. Embaixo: a linha é o volume esperado pelo Google na hora, já descontada a chance de não chover.</span>'
+      : hasPop && pts.some((p, i) => Goog.at(i, p.t)) ? `<br><span><i style="background:var(--ink);height:2px"></i>linha escura: Google. Em cima, a chance de chuva; embaixo, o volume esperado na hora, já descontada a chance de não chover.</span>` : '') +
     (Traf.has() ? `<br><span>Trânsito:</span><span>${sw('--muted', 0.5)}livre</span><span>${sw('--a1')}lento</span><span>${sw('--a3')}congestionado</span>` : Traf.row() ? '<br><span>Trânsito: o Google não informou a intensidade por trecho nesta consulta; o tempo de viagem já considera o trânsito.</span>' : '') +
     (windy ? `<br><span>Vento (rajadas):</span><span>${sw('--a1')}35 km/h ou mais</span><span>${sw('--a2')}50</span><span>${sw('--a3')}70</span>` : '') +
     (S.extra.road ? `<br><span>Pista:</span><span>${sw('--a2')}simples</span><span>${sw('--muted', 0.5)}dupla ou sentido único</span><span>${sw('--soft')}sem informação</span>` : '') +
@@ -662,6 +680,7 @@ let DG = null;
 function slotText(s){
   const when = `Saindo ${asHora(s.dep)}`;
   if(s.rainMin == null) return `${when}: a previsão não cobre a viagem inteira.`;
+  if(s.g) return s.pMax < 0.1 ? `${when}: caminho seco, pelo Google.` : `${when}: a maior chance de chuva num trecho é de ${pct(s.pMax)}; cerca de ${Math.round(s.rainMin)} min de chuva esperados.`;
   if(s.pAny != null){
     if(s.pAny < 0.05) return `${when}: caminho seco em quase todas as previsões.`;
     return `${when}: ${pct(s.pAny)} de chance de pegar chuva; em média ${Math.round(s.rainMin)} min debaixo dela${s.hi != null && s.hi >= 1 ? ` (de ${Math.round(s.lo)} a ${Math.round(s.hi)} entre as previsões)` : ''}.`;
@@ -671,6 +690,7 @@ function slotText(s){
 }
 function currentSlot(){
   const t = S.trip, et = t.et;
+  if(t.gt) return {dep: S.departMs, rainMin: t.gt.expMin, lo: null, hi: null, pAny: null, pMax: t.gt.pMax, g: true, cat: t.peak ? t.peak.catIf : 0};
   return {dep: S.departMs, rainMin: t.hasData ? t.rainMin : null, lo: et ? et.minQ10 : null, hi: et ? et.minQ90 : null, pAny: et ? et.pAny : null, cat: t.peak ? t.peak.catIf : 0};
 }
 function renderDepart(){
@@ -737,7 +757,8 @@ function renderList(){
       main = k ? `${pct(p.pop != null ? p.pop : 0.5)} de chance` : 'seco';
       if(k) sub.push(rainPhrase(c, v).replace('chuva ', ''));
       const gq = Goog.at(i, p.t);
-      if(gq) sub.push(`Google ${pct(gq.pop)}`);
+      if(p.src === 'g'){ if(p.popApp != null) sub.push(`modelos ${pct(p.popApp)}`); }
+      else if(gq) sub.push(`Google ${pct(gq.pop)}`);
     } else main = c > 0 ? `${nf(v, 1)} mm/h` : 'seco';
     if(p.temp != null) sub.push(`${Math.round(p.temp)} °C`);
     if(p.wind) sub.push(`rajadas ${Math.round(p.gust)} km/h`);

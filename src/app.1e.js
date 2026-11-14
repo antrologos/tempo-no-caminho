@@ -52,7 +52,9 @@ const Goog = (() => {
     if(trip.arr < now) return (S.goog = {routeId: rid, skip: 'passada'});
     const need = Math.ceil((trip.arr - H0) / HOUR) + (opt.from != null ? 2 : 6);
     if(need > MAXH + 6) return (S.goog = {routeId: rid, skip: 'longe'});
-    const hours = Math.min(MAXH, need);
+    /* como fonte principal, o Google também alimenta o gráfico dos outros horários de saída: cobre até o fim do dia da partida */
+    const endDay = startOfDay(trip.dep) + DAY + (trip.arr - trip.dep);
+    const hours = Math.min(MAXH, opt.from == null && primGoogle() ? Math.max(need, Math.ceil((endDay - H0) / HOUR) + 1) : need);
     if(!opt.force && S.goog && S.goog.pop && S.goog.routeId === rid && S.goog.hours >= hours && S.goog.full === use().full && now - S.goog.when < 30 * MIN) return S.goog;
     const N = S.samples.length, i0 = clamp(opt.from || 0, 0, N - 1), M = N - i0, pages = Math.ceil(hours / 24), U = use(), u0 = usage();
     const nPts = Math.min(M, U.full ? Math.max(7, Math.floor(240 / pages)) : clamp(Math.floor(48 / pages), 7, 17)), idx = [];

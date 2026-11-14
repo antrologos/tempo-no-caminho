@@ -320,9 +320,14 @@ function ensTrip(dep){
     minMean: mean / tot, minQ10: wqtl(pairs(), 0.1), minQ50: wqtl(pairs(), 0.5), minQ90: wqtl(pairs(), 0.9)};
 }
 
+/* A chance de chuva principal é a do Google, onde ela existe (com chave e viagem nos próximos 7 dias): nas verificações
+   feitas com este app, ela errou bem menos que a do conjunto de modelos. O conjunto continua dando o volume "se chover",
+   o tipo de chuva e a chance das viagens que o Google não alcança. */
+const primGoogle = () => !S.demo && Prefs.get().prim !== 'app' && !!Goog.getKey();
+
 /* ================= a viagem para um horário de saída ================= */
 function computeTrip(dep){
-  const k = 1 + S.slack, md = MODES[S.mode], models = S.wx.list;
+  const k = 1 + S.slack, md = MODES[S.mode], models = S.wx.list, useG = primGoogle();
   const pts = S.samples.map((s, i) => {
     const t = dep + s.t * 1000 * k;
     const per = {}, ps = [], temps = [], capes = [], wetHR = [];
@@ -357,14 +362,19 @@ function computeTrip(dep){
     const temp = temps.length ? median(temps) : null, cape = capes.length ? median(capes) : null;
     const ens = ensAt(i, t);
 
-    const pop = ens ? ens.pop : (n ? wetHR.length / n : null);
+    const popApp = ens ? ens.pop : (n ? wetHR.length / n : null);
+    /* a chance mostrada: a do Google, onde ele alcança; senão, a do conjunto de modelos */
+    const gq = useG ? Goog.at(i, t) : null;
+    const pop = gq ? gq.pop : popApp;
     let klass = klassOf(pop);
     let amt = ens ? ens.wetMed : (wetHR.length ? median(wetHR) : null);
+    /* o Google vê chuva e o conjunto não tem volume para dar: usa o volume esperado pelo Google, dividido pela chance */
+    if(klass && amt == null && gq && gq.qpf != null && gq.pop >= 0.1) amt = clamp(gq.qpf / gq.pop, 0.2, 30);
     if(klass && amt == null) amt = 0.3;
     if(!klass) amt = null;
     const hi = !klass ? 0 : ens ? Math.max(amt, ens.wetQ90 || 0) : Math.max(amt, max || 0);
     /* os modelos principais ainda podem destoar do conjunto: 2 = pico mais forte; 1 = chuva onde o conjunto dá pouca chance */
-    const hrMore = (!ens || !n) ? 0 : (klass >= 2 && max != null && catOf(max) > catOf(hi)) ? 2 : (klass < 2 && wetHR.length * 2 >= n) ? 1 : 0;
+    const hrMore = (!ens || !n) ? 0 : (klass >= 2 && max != null && catOf(max) > catOf(hi)) ? 2 : (!gq && klass < 2 && wetHR.length * 2 >= n) ? 1 : 0;
     /* tipo de chuva: pancada (convectiva, localizada) ou contínua (de frente, espalhada).
        Vem da parte da chuva que os modelos atribuem a pancadas e, na falta dela, da energia para tempestades (CAPE). */
     let regime = null;
@@ -379,7 +389,7 @@ function computeTrip(dep){
       thunder: thunder > 0, fog: fog > 0,
       wind: gust != null && gust >= md.gust,
       heat: md.heat != null && temp != null && temp >= md.heat,
-      ens, pop, klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
+      ens, pop, popApp, src: gq ? 'g' : 'app', klass, amt, catIf: klass ? Math.max(1, catOf(amt)) : 0, hi, hrMore,
       regime, shower: regime === 'pancada' && klass >= 2
     };
   });
@@ -404,8 +414,22 @@ function computeTrip(dep){
   const detMin = pts.filter(p => p.med != null && p.med >= WET).reduce((a, p) => a + p.w, 0) / 60;
   const et = ensTrip(dep);
   const peak = pts.reduce((b, p) => (p.amt != null && (b == null || p.amt > b.amt)) ? p : b, null);
-  return {dep, arr: dep + S.route.dur * 1000 * k, k, pts, episodes, et, detMin,
-    rainMin: et ? et.minMean : detMin, peak, hasData: pts.some(p => p.n > 0 || p.ens)};
+  /* quando quase todos os trechos têm a chance do Google, os números da viagem inteira também saem dela:
+     a maior chance num trecho, os quilômetros com 30% ou mais e os minutos de chuva esperados (soma de chance x duração) */
+  const nG = pts.filter(p => p.src === 'g').length, prim = nG >= pts.length * 0.9 ? 'g' : nG ? 'mix' : 'app';
+  let gt = null;
+  if(prim === 'g'){
+    let expSec = 0, iMax = 0, km30 = 0;
+    pts.forEach((p, i) => {
+      if(p.pop == null) return;
+      expSec += p.pop * p.w;
+      if(p.pop > (pts[iMax].pop || 0)) iMax = i;
+      if(p.pop >= 0.3) km30 += (S.samples[Math.min(pts.length - 1, i + 1)].dist - S.samples[Math.max(0, i - 1)].dist) / 2;
+    });
+    gt = {pMax: pts[iMax].pop || 0, iMax, expMin: expSec / 60, km30};
+  }
+  return {dep, arr: dep + S.route.dur * 1000 * k, k, pts, episodes, et, detMin, prim, gt,
+    rainMin: gt ? gt.expMin : (et ? et.minMean : detMin), peak, hasData: pts.some(p => p.n > 0 || p.ens || p.src === 'g')};
 }
 
 /* janela de risco num ponto fixo: as horas em volta da passagem em que a chance fica em 30% ou mais */
@@ -423,6 +447,7 @@ function riskWindow(i, t){
 /* resumo para cada horário de saída do dia (passo de 30 min) */
 function exploreDay(day0){
   const k = 1 + S.slack, models = S.wx.list, now = Date.now(), out = [];
+  const useG = primGoogle() && S.goog && S.goog.pop && S.goog.routeId === S.routeId;
   for(let s = 0; s < 48; s++){
     const dep = day0 + s * 30 * MIN;
     let wetSec = 0, peak = 0, known = 0;
@@ -435,7 +460,17 @@ function exploreDay(day0){
       if(med >= WET) wetSec += sm.w * k;
       if(med > peak) peak = med;
     });
-    const ok = known >= S.samples.length * 0.9, et = ensTrip(dep);
+    const ok = known >= S.samples.length * 0.9;
+    if(useG){
+      /* com o Google como fonte principal, os outros horários também usam a chance dele; onde ele não alcança, fica sem dado */
+      let exp = 0, pmax = 0, kn = 0;
+      S.samples.forEach((sm, i) => { const g = Goog.at(i, dep + sm.t * 1000 * k); if(!g) return; kn++; exp += g.pop * sm.w * k; if(g.pop > pmax) pmax = g.pop; });
+      const okG = kn >= S.samples.length * 0.9;
+      out.push({dep, past: dep < now - 10 * MIN, rainMin: okG ? exp / 60 : null, lo: null, hi: null, pAny: null, pMax: okG ? pmax : null, g: true,
+        cat: okG ? Math.max(pmax >= 0.3 ? 1 : 0, ok ? catOf(peak) : 0) : -1});
+      continue;
+    }
+    const et = ensTrip(dep);
     out.push({
       dep, past: dep < now - 10 * MIN,
       rainMin: et ? et.minMean : (ok ? wetSec / 60 : null),

@@ -26,7 +26,7 @@ Com o site aberto em https ou instalado, o botão "Acompanhar a viagem" usa o GP
 |---|---|---|
 | Caminho e tempo de viagem | Google Routes API (com chave) ou OSRM nos servidores da FOSSGIS | sem chave, o caminho é o do OpenStreetMap, sem trânsito |
 | Previsão do tempo | Open-Meteo: simulações (ensembles) do ECMWF, GFS e ICON e modelos detalhados de até nove centros | uso gratuito não comercial, 10.000 chamadas por dia por rede |
-| Segunda previsão | Google Weather API (com chave) | 10.000 chamadas por mês sem cobrança |
+| Chance de chuva principal, com chave | Google Weather API | viagens nos próximos 7 dias; 10.000 chamadas por mês sem cobrança. Sem chave, a chance vem do conjunto de modelos |
 | Tipo de pista, faixas e piso | Overpass API (dados do OpenStreetMap) | lidos em dois pontos por trecho do caminho |
 | Relevo | Open-Meteo Elevation (modelo de terreno Copernicus, malha de 90 m) | até 200 pontos por viagem |
 | Nomes de lugares | Photon (Komoot) | |
