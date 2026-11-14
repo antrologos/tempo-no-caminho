@@ -105,7 +105,7 @@
 
       <div class="od-extra">
         <button type="button" id="via-add" class="linkbtn">Adicionar parada</button>
-        <p class="hint" id="map-hint">Para marcar um ponto no mapa, toque nele e escolha partir dali, passar por ali ou chegar ali.</p>
+        <p class="hint" id="map-hint">Para marcar um ponto no mapa, toque nele e escolha partir dali, passar por ali ou chegar ali. No computador, a linha da rota também pode ser puxada com o mouse.</p>
       </div>
 
       <div class="when">
@@ -165,9 +165,10 @@
       <div class="draft" id="draft" hidden>
         <h2>Caminho traçado</h2>
         <div class="alts" id="draft-alts" role="group" aria-label="Rotas possíveis"></div>
+        <p class="alts-key" id="draft-key" hidden><i class="k-sel"></i>rota escolhida<i class="k-alt"></i>outras rotas, com o tempo de cada uma</p>
         <p class="facts" id="draft-facts"></p>
         <button type="button" class="go" id="draft-go">Ver o tempo neste caminho</button>
-        <p class="hint">A previsão só é buscada quando você confirma. Antes disso, dá para trocar de rota, incluir paradas ou mexer nos pontos sem gastar consultas de previsão.</p>
+        <p class="hint">A previsão só é buscada quando você confirma. Antes disso, dá para trocar de rota, incluir paradas ou mudar um trecho sem gastar consultas de previsão: no computador, puxe a linha da rota com o mouse; no celular, toque no mapa e escolha “Passar por aqui”.</p>
         <button type="button" class="linkbtn" id="draft-cancel" hidden>Voltar ao resultado anterior</button>
       </div>
       <div class="verdict" id="verdict" hidden>
@@ -177,6 +178,7 @@
         </button>
         <div class="live" id="live" hidden aria-live="polite"></div>
         <div class="alts" id="alts" hidden role="group" aria-label="Rotas possíveis"></div>
+        <p class="alts-key" id="alts-key" hidden><i class="k-sel"></i>rota escolhida<i class="k-alt"></i>outras rotas, com o tempo de cada uma</p>
         <h2 id="v-head"></h2>
         <div class="chips" id="v-chips"></div>
         <div class="alerts" id="v-alerts"></div>
@@ -303,7 +305,7 @@
           <p><strong>Rota e trânsito.</strong> Com a chave do Google, o caminho, a distância e o tempo de viagem são calculados pelo Google (Routes API, que precisa estar ativada no projeto e liberada na chave). De carro, o tempo já considera o trânsito previsto para o horário de saída; ao trocar o horário, o app pede o tempo de novo, sem buscar outra vez a previsão do clima. Na opção com intensidade, o Google informa onde o trânsito deve estar livre, lento ou parado, o que vira uma camada no mapa e uma faixa no gráfico; o app reparte o atraso entre os trechos lentos e parados por uma regra própria, e o tempo total é sempre o do Google. O gráfico de outros horários de saída usa o tempo de viagem do horário escolhido. O Google não informa se a pista é simples ou dupla: essa estimativa continua vindo do OpenStreetMap e é levada para o caminho do Google onde os dois traçados coincidem. Sem chave, ou se o Google falhar, o caminho é o do OpenStreetMap, sem trânsito, e o app avisa.</p>
           <p><strong>Acompanhar a viagem.</strong> Com o app aberto num endereço seguro (https) ou instalado, o botão "Acompanhar a viagem" usa o GPS do aparelho, com a tela ligada. A posição é levada ao ponto mais próximo do caminho; a hora de cada trecho à frente passa a contar a partir de agora, e o painel mostra o que vem em 10, 30 e 60 minutos (5, 15 e 30 a pé ou de bicicleta) e o próximo aviso. Durante o acompanhamento o app se atualiza sozinho: o trânsito, a partir da sua posição, a cada 5 minutos; a chuva pelo Google nos trechos à frente, a cada 15 minutos; os modelos e as simulações, a cada 3 horas, porque mudam poucas vezes por dia e o serviço gratuito é limitado. Se você ficar a mais de 800 m do caminho traçado por mais de três minutos, a rota é refeita a partir de onde você está, no máximo a cada 15 minutos e 8 vezes por viagem, porque cada rota refeita gasta uma consulta inteira de previsão. O painel mostra a hora da última atualização de cada dado.</p>
           <p><strong>Partida, chegada e horário.</strong> Tanto a partida quanto a chegada podem ser a sua localização, lida pelo GPS do aparelho: escolha "Minha localização" na lista que aparece ao tocar no campo. Isso só funciona com o app aberto no endereço https ou instalado. O horário de saída começa sempre em "agora" e não pode ficar no passado; para outro horário, altere o dia e a hora.</p>
-          <p><strong>Paradas, pontos no mapa e rotas alternativas.</strong> Você pode incluir até 8 paradas entre a partida e a chegada e mudar a ordem arrastando pelo ícone de três traços; a partida e a chegada entram na mesma ordem. Para marcar um ponto no mapa, toque nele (fora da linha da rota) e escolha partir dali, passar por ali ou chegar ali. O app primeiro traça o caminho e mostra as rotas possíveis; a previsão do tempo só é buscada depois que você confirma o caminho, para não gastar consultas enquanto a rota ainda está sendo definida. Quando não há paradas, o app pede também as rotas alternativas e mostra cada uma com o tempo e a distância; a previsão é buscada para a rota escolhida, e para as outras só quando você toca nelas, porque cada rota gasta uma consulta inteira de previsão.</p>
+          <p><strong>Paradas, pontos no mapa e rotas alternativas.</strong> Você pode incluir até 8 paradas entre a partida e a chegada e mudar a ordem arrastando pelo ícone de três traços; a partida e a chegada entram na mesma ordem. Para marcar um ponto no mapa, toque nele (fora da linha da rota) e escolha partir dali, passar por ali ou chegar ali. Para mudar só um trecho, puxe a linha da rota com o mouse (no computador) ou use “Passar por aqui”: o app pede ao Google que passe pelo ponto novo e mantenha o resto do caminho, guardando alguns pontos da rota atual. O ponto de passagem aparece como uma bolinha branca; clicar nela o retira. O app primeiro traça o caminho e mostra as rotas possíveis; a previsão do tempo só é buscada depois que você confirma o caminho, para não gastar consultas enquanto a rota ainda está sendo definida. Quando não há paradas, o app pede também as rotas alternativas e mostra cada uma com o tempo e a distância; a previsão é buscada para a rota escolhida, e para as outras só quando você toca nelas, porque cada rota gasta uma consulta inteira de previsão.</p>
           <p><strong>Tempo de viagem.</strong> A rota vem do OpenStreetMap e não enxerga trânsito ao vivo, obras nem paradas. Use a folga para aproximar da sua realidade. Os horários seguem o fuso do seu aparelho.</p>
           <p><strong>Prazo.</strong> Quanto mais distante a data, menos confiáveis são a hora e o lugar exatos da chuva. Além de dois ou três dias, vale mais a tendência do que o detalhe. Confira de novo perto da saída.</p>
           <p><strong>O que não aparece aqui.</strong> Interdições, quedas de barreira, alagamentos e avisos oficiais. Antes de pegar a estrada, veja os alertas do INMET e da Defesa Civil e as condições da rodovia com a PRF ou a concessionária.</p>

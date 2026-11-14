@@ -4,7 +4,7 @@ const mqMobile = matchMedia('(max-width: 899px)');
 const isMobile = () => mqMobile.matches;
 
 const MapCtl = (() => {
-  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], picking = null, draft = null, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
+  let kind = null, gl = null, glReady = false, needFit = false, el = null, mk = {}, hazMk = [], viaMk = [], altMk = [], picking = null, draft = null, sketchPts = [], styleTimer = null, userMoved = false, fitTimer = null;
   const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
   /* a rota é sempre uma linha contínua, em cima da estrada. A cor é a força da chuva; quanto menor a chance,
      mais a cor se apaga, até o cinza de "seco" */
@@ -81,7 +81,13 @@ const MapCtl = (() => {
     const round = {'line-cap': 'round', 'line-join': 'round'};
     const width = ['interpolate', ['linear'], ['zoom'], 4, 3.5, 9, 5.5, 13, 7.5];
     gl.addSource('alts', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
-    gl.addLayer({id: 'alts-line', type: 'line', source: 'alts', layout: round, paint: {'line-color': cssVar('--muted'), 'line-opacity': 0.55, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 4, 9, 6, 13, 8]}}, before);
+    /* as outras rotas possíveis: finas e tracejadas. Uma faixa larga e invisível por baixo facilita o toque. */
+    gl.addLayer({id: 'alts-line', type: 'line', source: 'alts', layout: round, paint: {'line-color': cssVar('--muted'), 'line-opacity': 0.01, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 12, 9, 16, 13, 20]}}, before);
+    gl.addLayer({id: 'alts-dash', type: 'line', source: 'alts', layout: {'line-cap': 'butt', 'line-join': 'round'},
+      paint: {'line-color': cssVar('--muted'), 'line-opacity': 0.9, 'line-dasharray': [2, 1.5], 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2, 9, 3, 13, 4.5]}}, before);
+    /* a rota escolhida ganha um contorno forte, na cor do texto, para se destacar mesmo quando o caminho é seco (cinza) */
+    gl.addLayer({id: 'trip-halo', type: 'line', source: 'trip', layout: round,
+      paint: {'line-color': cssVar('--ink'), 'line-opacity': 0.95, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 8.5, 9, 12.5, 13, 16]}}, before);
     gl.addLayer({id: 'trip-casing', type: 'line', source: 'trip', layout: round,
       paint: {'line-color': cssVar('--casing'), 'line-opacity': 0.92, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 6, 9, 9, 13, 12]}}, before);
     gl.addLayer({id: 'trip-line', type: 'line', source: 'trip', layout: round, paint: {'line-color': ['get', 'color'], 'line-width': width}}, before);
@@ -92,7 +98,9 @@ const MapCtl = (() => {
     const ps = draft ? [{coords: draft.alts[draft.i].route.coords, color: cssVar('--ink')}] : (S.samples ? parts() : []);
     gl.getSource('trip').setData({type: 'FeatureCollection', features: ps.map(q => ({type: 'Feature', properties: {color: q.color}, geometry: {type: 'LineString', coordinates: q.coords}}))});
     gl.setPaintProperty('trip-casing', 'line-color', cssVar('--casing'));
-    /* as outras rotas possíveis ficam em cinza, por baixo; tocar numa delas a escolhe */
+    if(gl.getLayer('trip-halo')) gl.setPaintProperty('trip-halo', 'line-color', cssVar('--ink'));
+    if(gl.getLayer('alts-dash')) gl.setPaintProperty('alts-dash', 'line-color', cssVar('--muted'));
+    /* as outras rotas possíveis ficam tracejadas, por baixo; tocar numa delas a escolhe */
     const others = (draft ? draft.alts : (S.alts && !S.demo ? S.alts : [])).map((a, i) => ({a, i})).filter(o => o.i !== (draft ? draft.i : S.alt));
     if(gl.getSource('alts')) gl.getSource('alts').setData({type: 'FeatureCollection', features: others.map(o => ({type: 'Feature', properties: {i: o.i}, geometry: {type: 'LineString', coordinates: o.a.route.coords}}))});
   }
@@ -106,8 +114,38 @@ const MapCtl = (() => {
     m.style.top = Math.max(8, Math.min(h - 150, pt.y + 10)) + 'px';
   }
   const mkEl = (cls, html = '') => { const d = document.createElement('div'); d.className = 'mk ' + cls; d.innerHTML = html; return d; };
+  /* ponto de uma rota alternativa que fica mais longe da rota escolhida: é onde vai a etiqueta dela */
+  function farPoint(c, m){
+    const ms = [];
+    for(let j = 0; j < m.length; j += Math.max(1, Math.floor(m.length / 160))) ms.push(m[j]);
+    let best = c[Math.floor(c.length / 2)], bd = -1;
+    for(let j = Math.floor(c.length * 0.08); j < c.length * 0.92; j += Math.max(1, Math.floor(c.length / 48))){
+      const p = c[j], kx = Math.cos(p[1] * Math.PI / 180);
+      let d = Infinity;
+      for(const q of ms){ const dx = (q[0] - p[0]) * kx, dy = q[1] - p[1], dd = dx * dx + dy * dy; if(dd < d) d = dd; }
+      if(d > bd){ bd = d; best = p; }
+    }
+    return best;
+  }
+  /* etiquetas das rotas alternativas, com o tempo de cada uma e a diferença para a escolhida */
+  function altLabels(){
+    altMk.forEach(m => m.remove()); altMk = [];
+    const list = draft ? draft.alts : (S.alts && !S.demo ? S.alts : []), cur = draft ? draft.i : S.alt;
+    if(!list || list.length < 2 || !list[cur]) return;
+    const k = 1 + S.slack, main = list[cur].route;
+    list.forEach((al, i) => {
+      if(i === cur) return;
+      const dm = (al.route.dur - main.dur) * k / 60;
+      const txt = al.stale ? 'outro caminho' : `${durText(al.route.dur * k)}, ${Math.abs(dm) < 1 ? 'mesmo tempo' : minText(Math.abs(dm)) + (dm > 0 ? ' a mais' : ' a menos')}`;
+      const e = mkEl('mk-alt', esc(txt));
+      e.setAttribute('role', 'button'); e.setAttribute('aria-label', 'Usar esta rota: ' + txt);
+      e.addEventListener('click', ev => { ev.stopPropagation(); if(draft) selectDraft(i); else useAlt(i); });
+      altMk.push(new maplibregl.Marker({element: e}).setLngLat(farPoint(al.route.coords, main.coords)).addTo(gl));
+    });
+  }
   function markersGL(){
     if(!draft && !S.samples) return;
+    altLabels();
     const dc = draft ? draft.alts[draft.i].route.coords : null;
     const a = draft ? {lon: dc[0][0], lat: dc[0][1]} : S.samples[0], b = draft ? {lon: dc[dc.length - 1][0], lat: dc[dc.length - 1][1]} : S.samples[S.samples.length - 1], s = draft ? a : S.samples[S.scrub];
     if(!mk.a){
@@ -118,7 +156,12 @@ const MapCtl = (() => {
     mk.a.setLngLat([a.lon, a.lat]).addTo(gl);
     mk.b.setLngLat([b.lon, b.lat]).addTo(gl);
     viaMk.forEach(m => m.remove());
-    viaMk = (S.demo ? [] : ((draft ? draft.vias : S.vias) || [])).map((p, k) => new maplibregl.Marker({element: mkEl('mk-via', String(k + 1))}).setLngLat([p.lon, p.lat]).addTo(gl));
+    let nStop = 0;
+    viaMk = (S.demo ? [] : ((draft ? draft.vias : S.vias) || [])).map(p => {
+      const e = p.pass ? mkEl('mk-pass') : mkEl('mk-via', String(++nStop));
+      if(p.pass){ e.title = 'Clique para tirar este ponto de passagem'; e.setAttribute('role', 'button'); e.addEventListener('click', ev => { ev.stopPropagation(); Vias.drop(p); }); }
+      return new maplibregl.Marker({element: e}).setLngLat([p.lon, p.lat]).addTo(gl);
+    });
     hazMk.forEach(m => m.remove());
     if(draft){ hazMk = []; mk.you.remove(); return; }
     let prev = -9, lift = 0;
@@ -185,6 +228,31 @@ const MapCtl = (() => {
       /* toque fora da rota: abre o menu para partir dali, passar por ali ou chegar ali */
       if(!onMain) showMenu(e.lngLat, e.point);
     });
+    /* computador: a rota escolhida pode ser puxada com o mouse para passar por outro caminho, como nos apps de mapa.
+       Ao passar o mouse sobre ela, o cursor vira uma mão e aparece um ponto branco; arrastar e soltar cria a passagem. */
+    let pull = null;
+    const canPull = () => !isMobile() && !picking && !S.busy && !S.demo && !!(draft || S.samples);
+    const handle = () => { if(!mk.handle) mk.handle = new maplibregl.Marker({element: mkEl('mk-handle')}); return mk.handle; };
+    gl.on('mousemove', 'trip-halo', e => { if(pull || !canPull()) return; gl.getCanvas().style.cursor = 'grab'; handle().setLngLat(e.lngLat).addTo(gl); });
+    gl.on('mouseleave', 'trip-halo', () => { if(pull) return; gl.getCanvas().style.cursor = ''; if(mk.handle) mk.handle.remove(); });
+    gl.on('mousedown', 'trip-halo', e => {
+      if(!canPull() || (e.originalEvent && e.originalEvent.button !== 0)) return;
+      e.preventDefault();                                   /* o mapa fica parado enquanto a rota é puxada */
+      pull = {x: e.point.x, y: e.point.y, ll: e.lngLat, moved: false};
+      gl.getCanvas().style.cursor = 'grabbing';
+    });
+    gl.on('mousemove', e => {
+      if(!pull) return;
+      if(Math.hypot(e.point.x - pull.x, e.point.y - pull.y) > 6) pull.moved = true;
+      handle().setLngLat(e.lngLat).addTo(gl);
+    });
+    gl.on('mouseup', e => {
+      if(!pull) return;
+      const p = pull; pull = null;
+      gl.getCanvas().style.cursor = ''; if(mk.handle) mk.handle.remove();
+      if(p.moved) passAt(e.lngLat.lat, e.lngLat.lng, {from: {lat: p.ll.lat, lon: p.ll.lng}});
+    });
+    window.addEventListener('mouseup', () => { if(pull){ pull = null; gl.getCanvas().style.cursor = ''; if(mk.handle) mk.handle.remove(); } });
     /* tocar e segurar (ou botão direito) num ponto do mapa: partir dali, parar ali ou chegar ali */
     gl.on('contextmenu', e => { if(e.originalEvent) e.originalEvent.preventDefault(); showMenu(e.lngLat, e.point); });
     let lp = null, lp0 = null;
@@ -305,6 +373,8 @@ const MapCtl = (() => {
     meOff(){ if(mk.me){ mk.me.remove(); mk.me = null; } },
     /* modo de escolha: o próximo toque no mapa devolve o ponto */
     canPick(){ return kind === 'gl' && glReady; },
+    /* só para os testes: onde um ponto do mapa aparece na tela */
+    _px(lon, lat){ if(kind !== 'gl' || !glReady) return null; const q = gl.project([lon, lat]), b = el.getBoundingClientRect(); return {x: b.left + q.x, y: b.top + q.y}; },
     /* mostra um caminho traçado e ainda não confirmado (ou volta ao normal, com null) */
     setDraft(d){ draft = d; if(kind !== 'gl' || !glReady) return; pushGL(); markersGL(); if(d){ userMoved = false; fitGL(true); } },
     pick(cb){ picking = cb; hideMenu(); },
@@ -562,8 +632,9 @@ function updatePill(){
   if(!F || !T){ $('#pill-od').innerHTML = '<span>Planejar a viagem</span>'; $('#pill-when').textContent = 'Toque para dizer a partida e a chegada'; return; }
   $('#pill-od').innerHTML = `<span>${esc(F.label)}</span>${icon('arrow')}<span>${esc(T.label)}</span>`;
   const dep = D ? readDepart() : (S.departMs || readDepart());
-  const nv = S.demo ? 0 : ((D ? D.vias : S.vias) || []).length;
-  $('#pill-when').textContent = `${nv ? `${nv} ${nv === 1 ? 'parada' : 'paradas'}; ` : ''}${nv ? dayLabel(dep) : cap(dayLabel(dep))} às ${hhmm(dep)}${S.nowMode && !S.demo && !Live.on() ? ' (agora)' : ''}, ${MODES[S.mode].label.toLowerCase()}${D ? '; falta confirmar o caminho' : ''}`;
+  const vv = S.demo ? [] : ((D ? D.vias : S.vias) || []), nv = vv.filter(v => !v.pass).length, np = vv.length - nv;
+  const pre = [nv ? `${nv} ${nv === 1 ? 'parada' : 'paradas'}` : '', np ? `${np} ${np === 1 ? 'ponto de passagem' : 'pontos de passagem'}` : ''].filter(Boolean).join(' e ');
+  $('#pill-when').textContent = `${pre ? pre + '; ' : ''}${pre ? dayLabel(dep) : cap(dayLabel(dep))} às ${hhmm(dep)}${S.nowMode && !S.demo && !Live.on() ? ' (agora)' : ''}, ${MODES[S.mode].label.toLowerCase()}${D ? '; falta confirmar o caminho' : ''}`;
 }
 function setSheet(s){
   S.sheet = s;
@@ -595,7 +666,7 @@ function applyMode(){
 /* ---------- viagens salvas (ficam só neste aparelho) ---------- */
 const Store = (() => { try{ const k = '__tnc'; window.localStorage.setItem(k, '1'); window.localStorage.removeItem(k); return window.localStorage; }catch(_){ return null; } })();
 const SAVED_KEY = 'tempo-no-caminho:viagens';
-const slim = p => Object.assign({label: p.label, detail: p.detail || '', lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5)}, p.here ? {here: true} : {});
+const slim = p => Object.assign({label: p.label, detail: p.detail || '', lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5)}, p.here ? {here: true} : {}, p.pass ? {pass: true} : {});
 const tripKey = (a, b, v) => [a].concat(v || [], [b]).map(p => `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`).join('>');
 function savedTrips(){
   if(!Store) return [];
@@ -664,6 +735,18 @@ function setHere(which, quiet){
   locateNow().catch(e => { if(!quiet) showError(e); });
 }
 
+/* Quando a pessoa puxa um trecho da rota para outro caminho, o resto deve ficar como estava. Para isso o app guarda
+   alguns pontos da rota atual (pins) e pede ao Google que passe por eles. Eles valem enquanto a partida, a chegada
+   e a lista de paradas não mudam, e somem quando a pessoa escolhe outra rota. */
+const Pins = {
+  list: [], ref: null, key: '',
+  clear(){ this.list = []; this.ref = null; },
+  check(from, to){
+    const k = `${from.lat.toFixed(4)},${from.lon.toFixed(4)}>${to.lat.toFixed(4)},${to.lon.toFixed(4)}`;
+    if(k !== this.key){ this.clear(); this.key = k; }
+  }
+};
+
 /* ---------- paradas no caminho ----------
    Cada parada é uma linha do formulário, com as mesmas sugestões de lugar. A partida, as paradas e a chegada formam
    uma lista só: arrastar uma parada muda a ordem, e o conteúdo dos campos acompanha. */
@@ -671,9 +754,10 @@ const Vias = (() => {
   const MAX = 8;
   let rows = [], seq = 0;
   const text = p => p.detail ? `${p.label}, ${p.detail}` : p.label;
-  const changed = () => { if(S.route && !S.demo && !S.busy && els.from.value.trim() && els.to.value.trim()) plan({keep: true}); };
+  const changed = keepPins => { if(!keepPins) Pins.clear(); if((S.route || S.draft) && !S.demo && !S.busy && els.from.value.trim() && els.to.value.trim()) plan({keep: true}); };
   function relabel(){
-    rows.forEach((r, k) => { r.el.querySelector('label').textContent = `Parada ${k + 1}`; });
+    let n = 0;
+    rows.forEach(r => { r.el.querySelector('label').textContent = r.pick && r.pick.pass ? 'Passar por' : `Parada ${++n}`; });
     $('#via-add').hidden = rows.length >= MAX || !!S.demo;
   }
   function wire(row){
@@ -685,7 +769,7 @@ const Vias = (() => {
     };
     const choose = p => { row.pick = p; row.input.value = text(p); items = []; close(); changed(); };
     row.input.addEventListener('input', () => {
-      row.pick = null; clearTimeout(timer); if(ctl) ctl.abort();
+      const was = row.pick && row.pick.pass; row.pick = null; if(was) relabel(); clearTimeout(timer); if(ctl) ctl.abort();
       const q = row.input.value.trim();
       if(q.length < 3){ items = []; render(); return; }
       const me = ++my;
@@ -737,7 +821,7 @@ const Vias = (() => {
     S.pick.to = C[C.length - 1].pick; els.to.value = C[C.length - 1].text;
     changed();
   }
-  function add(place, focus){
+  function add(place, focus, at){
     if(rows.length >= MAX) return null;
     const id = 'via' + (++seq), el = document.createElement('div');
     el.className = 'field via-row';
@@ -746,10 +830,11 @@ const Vias = (() => {
       `<input id="${id}" class="input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Cidade, endereço ou lugar" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list">` +
       `<button type="button" class="inbtn via-del" aria-label="Remover esta parada" title="Remover esta parada">${icon('close')}</button></div>` +
       `<ul id="${id}-list" class="options" role="listbox" aria-label="Sugestões para a parada" hidden></ul>`;
-    $('#vias').appendChild(el);
+    const pos = at == null ? rows.length : clamp(at, 0, rows.length);
+    $('#vias').insertBefore(el, pos < rows.length ? rows[pos].el : null);
     const row = {el, input: el.querySelector('input'), list: el.querySelector('ul'), pick: place || null};
     if(place) row.input.value = text(place);
-    rows.push(row); wire(row); relabel();
+    rows.splice(pos, 0, row); wire(row); relabel();
     if(focus) row.input.focus();
     return row;
   }
@@ -774,7 +859,10 @@ const Vias = (() => {
   function lock(on){ rows.forEach(r => { r.input.disabled = on; }); relabel(); }
   /* dá nome a um ponto marcado no mapa, quando o serviço de lugares responde */
   function rename(place, label){ const r = rows.find(x => x.pick === place); if(r){ place.label = label; r.input.value = label; } }
-  return {add, set, resolve, reverse, lock, relabel, rename, MAX};
+  /* os lugares já escolhidos, na ordem; e a retirada de um ponto pelo próprio lugar (o ponto branco no mapa) */
+  const places = () => rows.filter(r => r.pick && isFinite(r.pick.lat)).map(r => r.pick);
+  function drop(place){ const r = rows.find(x => x.pick === place); if(r){ remove(r); changed(); } }
+  return {add, set, resolve, reverse, lock, relabel, rename, places, drop, MAX};
 })();
 
 function combo(which){
@@ -908,7 +996,7 @@ function showResult(){
 /* O trajeto fica no endereço da página (depois do #). Salvar nos favoritos guarda a viagem. */
 function writeHash(){
   try{
-    const enc = p => p.here ? 'aqui' : `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.label}`;
+    const enc = p => p.here ? 'aqui' : `${p.lat.toFixed(5)},${p.lon.toFixed(5)},${p.pass ? '~' : ''}${p.label}`;
     const q = new URLSearchParams({de: enc(S.from), para: enc(S.to), modo: S.mode, folga: String(S.slack)});
     (S.vias || []).forEach(p => q.append('via', enc(p)));
     history.replaceState(null, '', '#' + q.toString());
@@ -923,7 +1011,8 @@ function readHash(){
       if(v === 'aqui') return hereObj();
       const m = (v || '').match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(.*)$/);
       if(!m || Math.abs(+m[1]) > 90 || Math.abs(+m[2]) > 180) return null;
-      return {lat: +m[1], lon: +m[2], label: m[3].slice(0, 80) || 'Ponto no mapa', detail: ''};
+      const pass = m[3].charAt(0) === '~', lab = (pass ? m[3].slice(1) : m[3]).slice(0, 80) || 'Ponto no mapa';
+      return Object.assign({lat: +m[1], lon: +m[2], label: lab, detail: ''}, pass ? {pass: true} : {});
     };
     const a = dec(q.get('de')), b = dec(q.get('para'));
     if(!a || !b) return false;
@@ -956,21 +1045,23 @@ async function plan(opts = {}){
     if(!vias.length && hav([from.lon, from.lat], [to.lon, to.lat]) < 200) throw new AppError('A partida e a chegada são praticamente o mesmo lugar.');
     setBusy(true, 'Traçando a rota…');
     const profile = MODES[S.mode].profile;
+    Pins.check(from, to);
+    const pins = Pins.list.slice(), inter = interOrder(vias, pins, Pins.ref);
     let list = null, gErr = '';
     if(Traf.mode()){
-      try{ list = await Traf.routes(from, to, profile, readDepart(), {vias, alts: true}); }
+      try{ list = await Traf.routes(from, to, profile, readDepart(), {inter, alts: true}); }
       catch(e){ gErr = (e && e.message) || 'sem resposta'; }
     }
-    if(!list){ list = await fetchRoute(from, to, profile, vias, true); if(gErr) list[0].gErr = gErr; }
+    if(!list){ list = await fetchRoute(from, to, profile, inter, true); if(gErr) list[0].gErr = gErr; }
     list.forEach(r => { if(!r.desc) r.desc = routeDesc(r); });
     const alts = list.map(r => ({route: r, id: 0, bundle: null, stat: null}));
     const i0 = opts.preferDist ? list.reduce((b, r, k) => Math.abs(r.dist - opts.preferDist) < Math.abs(list[b].dist - opts.preferDist) ? k : b, 0) : 0;
     /* viagem salva, link, rota refeita no acompanhamento ou pelo horário: o caminho já está decidido, e a previsão vem direto.
        Nos outros casos o app mostra o caminho e espera a confirmação antes de gastar uma consulta de previsão. */
     if(opts.auto || opts.live || opts.preferDist != null){
-      await adopt(alts, i0, {from, to, vias, profile, keep: opts.keep, live: opts.live});
+      await adopt(alts, i0, {from, to, vias, pins, profile, keep: opts.keep, live: opts.live});
       writeHash();
-    } else showDraft({from, to, vias, profile, alts, i: i0});
+    } else showDraft({from, to, vias, pins, profile, alts, i: i0});
     ok = true;
   }catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
@@ -992,8 +1083,9 @@ async function adopt(alts, i, ctx){
   S.extra = {relief: null, road: false};
   /* onde fica cada parada ao longo do caminho; e, numa rota que não é a recomendada, dois pontos de passagem
      que mantêm o Google nela quando o trânsito é refeito */
-  S.viaDist = (route.legEnds || []).slice(0, S.vias.length);
-  route.anchors = i > 0 && !S.vias.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
+  S.viaDist = S.vias.map(v => snapDist(route, v));
+  S.pins = (ctx.pins || []).map(p => Object.assign({}, p, {d: snapDist(route, p)}));
+  route.anchors = i > 0 && !S.vias.length && !S.pins.length && route.google ? [1 / 3, 2 / 3].map(f => { const p = pointAtDist(route, route.dist * f); return {lat: p.lat, lon: p.lon, d: route.dist * f}; }) : [];
   const id = alt.id = newRouteId();
   endDraft();
   recompute({focusWorst: true});
@@ -1013,18 +1105,24 @@ function endDraft(){
   $('#draft').hidden = true;
   MapCtl.setDraft(null);
 }
+/* as paradas e os pontos de passagem, em palavras */
+function viaText(vias){
+  const stops = (vias || []).filter(v => !v.pass), pass = (vias || []).filter(v => v.pass);
+  return (stops.length ? ` ${stops.length === 1 ? 'Parada' : 'Paradas'}: ${stops.map(v => v.label).join(', ')}.` : '') +
+    (pass.length ? ` Passando ${pass.map(v => v.label.replace(/^Perto de /, 'perto de ')).join(' e ')}.` : '');
+}
 function renderDraft(){
   const d = S.draft, box = $('#draft');
   if(!d){ box.hidden = true; return; }
   const k = 1 + S.slack, best = Math.min(...d.alts.map(a => a.route.dur)), R = d.alts[d.i].route, dep = readDepart();
   box.hidden = false;
-  $('#draft-alts').hidden = d.alts.length < 2;
+  $('#draft-alts').hidden = d.alts.length < 2; $('#draft-key').hidden = d.alts.length < 2;
   $('#draft-alts').innerHTML = d.alts.map((a, i) => `<button type="button" class="alt" data-i="${i}" aria-pressed="${i === d.i}"><b>${durText(a.route.dur * k)}</b>` +
     `<span>${esc(kmText(a.route.dist))}${a.route.desc ? ', ' + esc(a.route.desc) : ''}</span><span>${a.route.dur === best ? 'a mais rápida' : `${minText((a.route.dur - best) * k / 60)} a mais`}</span></button>`).join('');
   $('#draft-facts').textContent = `${kmText(R.dist)} em ${durText(R.dur * k)}${R.google && R.drive ? ', com o trânsito previsto pelo Google' : R.google ? '' : ', sem contar trânsito'}. ` +
     `Saída ${dayLabel(dep)} às ${hhmm(dep)}, chegada às ${hhmm(dep + R.dur * k * 1000)}.` +
-    (d.vias.length ? ` ${d.vias.length === 1 ? 'Parada' : 'Paradas'}: ${d.vias.map(v => v.label).join(', ')}.` : '') +
-    (d.alts.length > 1 ? ' As outras rotas aparecem em cinza no mapa.' : '') +
+    viaText(d.vias) +
+
     (R.gErr ? ` O Google não calculou a rota (${R.gErr}); este caminho é o do OpenStreetMap.` : '');
   $('#draft-cancel').hidden = !S.trip;
 }
@@ -1039,6 +1137,7 @@ function showDraft(d){
 function selectDraft(i){
   const d = S.draft;
   if(!d || !d.alts[i] || i === d.i || S.busy) return;
+  Pins.clear();
   d.i = i; renderDraft(); MapCtl.setDraft(d);
 }
 /* confirma o caminho: agora sim busca a previsão */
@@ -1048,7 +1147,7 @@ async function confirmDraft(){
   hideError();
   let ok = false;
   setBusy(true, 'Buscando a previsão…');
-  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, profile: d.profile}); writeHash(); ok = true; }
+  try{ await adopt(d.alts, d.i, {from: d.from, to: d.to, vias: d.vias, pins: d.pins, profile: d.profile}); writeHash(); ok = true; }
   catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
 }
@@ -1065,6 +1164,7 @@ function cancelDraft(){
 /* troca para outra das rotas possíveis. A previsão de cada uma é buscada só na primeira vez. */
 async function useAlt(i){
   if(S.busy || S.demo || !S.alts || !S.alts[i] || i === S.alt) return;
+  Pins.clear();
   if(Live.on()) Live.stop();
   hideError();
   const cur = S.alts[S.alt];
@@ -1082,7 +1182,7 @@ async function useAlt(i){
   }
   let ok = false;
   setBusy(true, 'Buscando a previsão desta rota…');
-  try{ await adopt(S.alts, i, {from: S.from, to: S.to, vias: S.vias, profile: S.routeMode, keep: true}); ok = true; }
+  try{ await adopt(S.alts, i, {from: S.from, to: S.to, vias: S.vias, pins: [], profile: S.routeMode, keep: true}); ok = true; }
   catch(e){ showError(e); }
   finally{ setBusy(false); settle(ok); }
 }
@@ -1091,6 +1191,7 @@ async function useAlt(i){
 function renderAlts(){
   const box = $('#alts');
   if(!box) return;
+  $('#alts-key').hidden = S.demo || !S.alts || S.alts.length < 2 || !S.trip;
   if(S.demo || !S.alts || S.alts.length < 2 || !S.trip){ box.hidden = true; box.innerHTML = ''; return; }
   const k = 1 + S.slack, best = Math.min(...S.alts.filter(a => !a.stale).map(a => a.route.dur));
   if(S.alts[S.alt] && S.pAnyNow != null) S.alts[S.alt].stat = S.pAnyNow;
@@ -1119,6 +1220,30 @@ async function pickPoint(which, lat, lon){
   }).catch(() => {});
   if(els.from.value.trim() && els.to.value.trim()) plan({keep: !!S.route});
   else { els.plan.classList.remove('is-min'); (els.from.value.trim() ? els.to : els.from).focus(); }
+}
+/* Faz a rota passar por um ponto, mudando só aquele trecho. o.from é de onde a rota foi puxada (quando foi arrastada). */
+function passAt(lat, lon, o = {}){
+  if(S.demo || S.busy) return;
+  const D = S.draft, R = D ? D.alts[D.i].route : S.route;
+  if(!R){ pickPoint('via', lat, lon); return; }
+  hideError();
+  const place = {label: 'Ponto no mapa', detail: '', lat, lon, pass: true};
+  const d0 = snapDist(R, o.from || place);
+  /* entra na lista antes da primeira parada que fica depois do ponto de onde a rota foi puxada */
+  const dists = Vias.places().map(p => snapDist(R, p));
+  let at = dists.findIndex(x => x > d0);
+  if(at < 0) at = dists.length;
+  if(!Vias.add(place, false, at)){ showError(new AppError(`O app aceita até ${Vias.MAX} paradas e pontos de passagem.`)); return; }
+  /* o resto do caminho fica como está: três pontos da rota atual, longe do trecho mexido e dos pontos já marcados */
+  const w = Math.max(15000, R.dist * 0.08);
+  Pins.list = [0.2, 0.5, 0.8].map(f => R.dist * f).filter(d => Math.abs(d - d0) > w && dists.every(x => Math.abs(x - d) > w))
+    .map(d => { const q = pointAtDist(R, d); return {lat: q.lat, lon: q.lon, d, pin: true}; });
+  Pins.ref = R;
+  reversePlace(lat, lon).then(n => {
+    const name = n && (n.street && n.city ? `${n.street}, ${n.city}` : (n.city || n.district || n.county));
+    if(name) Vias.rename(place, 'Perto de ' + name);
+  }).catch(() => {});
+  plan({keep: true});
 }
 function endPick(){ document.body.classList.remove('picking'); $('#pickbar').hidden = true; MapCtl.pick(null); requestAnimationFrame(syncChrome); }
 function startPick(which){
@@ -1293,7 +1418,7 @@ function initUI(){
   els.swap.addEventListener('click', () => {
     const v = els.from.value; els.from.value = els.to.value; els.to.value = v;
     const p = S.pick.from; S.pick.from = S.pick.to; S.pick.to = p;
-    Vias.reverse();
+    Vias.reverse(); Pins.clear();
     if(S.route && !S.demo && els.from.value.trim() && els.to.value.trim()) plan();
   });
   els.locate.addEventListener('click', () => { hideError(); setHere('from'); if(!els.to.value.trim()) els.to.focus(); });
@@ -1342,7 +1467,7 @@ function initUI(){
   $('#live-btn').addEventListener('click', () => Live.toggle());
   $('#via-add').addEventListener('click', () => Vias.add(null, true));
   $('#alts').addEventListener('click', e => { const b = e.target.closest('.alt'); if(b) useAlt(+b.dataset.i); });
-  $('#mapmenu').addEventListener('click', e => { const b = e.target.closest('button[data-act]'), m = $('#mapmenu'); if(!b) return; m.hidden = true; if(b.dataset.act !== 'close') pickPoint(b.dataset.act, +m.dataset.lat, +m.dataset.lon); });
+  $('#mapmenu').addEventListener('click', e => { const b = e.target.closest('button[data-act]'), m = $('#mapmenu'); if(!b) return; m.hidden = true; if(b.dataset.act === 'via') passAt(+m.dataset.lat, +m.dataset.lon); else if(b.dataset.act !== 'close') pickPoint(b.dataset.act, +m.dataset.lat, +m.dataset.lon); });
   $('#pick-cancel').addEventListener('click', endPick);
   $('#draft-go').addEventListener('click', confirmDraft);
   $('#draft-cancel').addEventListener('click', cancelDraft);
@@ -1750,7 +1875,7 @@ const Live = (() => {
 })();
 
 /* acesso para testes e diagnóstico */
-window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers};
+window.__tempoNoCaminho = {get S(){ return S; }, Conf, Calib, Goog, Traf, Live, Budget, detMembers, MapCtl, Pins};
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 

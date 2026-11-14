@@ -104,6 +104,21 @@ const Goog = (() => {
    previsto para o horário de saída, e o Google pode informar também onde o trânsito deve estar livre, lento ou parado.
    Cada consulta gasta uma chamada; trocar o horário de saída gasta outra, para refazer o tempo com o trânsito daquela hora. */
 API.groutes = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+/* distância, desde a partida, do ponto da rota mais próximo de p */
+function snapDist(route, p){
+  const c = route.coords, kx = Math.cos(p.lat * Math.PI / 180);
+  let best = 0, bd = Infinity;
+  for(let j = 0; j < c.length; j++){ const dx = (c[j][0] - p.lon) * kx, dy = c[j][1] - p.lat, d = dx * dx + dy * dy; if(d < bd){ bd = d; best = j; } }
+  return route.cumDist[best];
+}
+/* Junta, na ordem do caminho, as paradas e os pontos de passagem (vias) com os pontos que mantêm o resto da rota (pins).
+   A ordem das paradas é a da lista; os pins entram entre elas pela distância ao longo da rota de referência. */
+function interOrder(vias, pins, ref){
+  if(!pins || !pins.length || !ref) return (vias || []).slice();
+  const vd = (vias || []).map(v => snapDist(ref, v));
+  for(let i = 1; i < vd.length; i++) if(vd[i] <= vd[i - 1]) vd[i] = vd[i - 1] + 1;
+  return (vias || []).map((v, i) => ({p: v, d: vd[i]})).concat(pins.map(p => ({p, d: p.d}))).sort((x, y) => x.d - y.d).map(x => x.p);
+}
 const Traf = (() => {
   /* categorias de cobrança do Google: 0 sem trânsito (a pé e bicicleta), 1 com trânsito, 2 com trânsito e intensidade por trecho.
      O uso mensal sem cobrança é de 10.000, 5.000 e 1.000 chamadas; o app para um pouco antes. */
@@ -185,8 +200,9 @@ const Traf = (() => {
     const pt = p => ({location: {latLng: {latitude: +p.lat.toFixed(6), longitude: +p.lon.toFixed(6)}}});
     const body = {origin: pt(a), destination: pt(b), travelMode: drive ? 'DRIVE' : profile === 'bike' ? 'BICYCLE' : 'WALK',
       polylineQuality: 'HIGH_QUALITY', polylineEncoding: 'ENCODED_POLYLINE', languageCode: 'pt-BR', units: 'METRIC'};
-    const vias = opt.vias || [], anchors = vias.length ? [] : (opt.anchors || []);
-    if(vias.length) body.intermediates = vias.map(pt);
+    /* inter: paradas (o carro para ali) e pontos de passagem ou de manutenção do caminho (via: true, só passa) */
+    const vias = opt.inter || opt.vias || [], anchors = vias.length ? [] : (opt.anchors || []);
+    if(vias.length) body.intermediates = vias.map(p => (p.pass || p.pin) ? Object.assign(pt(p), {via: true}) : pt(p));
     else if(anchors.length) body.intermediates = anchors.map(p => Object.assign(pt(p), {via: true}));
     else if(opt.alts) body.computeAlternativeRoutes = true;
     let mask = 'routes.distanceMeters,routes.duration,routes.staticDuration,routes.description,routes.polyline.encodedPolyline,' +
@@ -235,7 +251,7 @@ const Traf = (() => {
     const R = S.route;
     if(!R || !R.google || !R.drive || S.demo || !mode()) return null;
     if(Math.abs(Math.max(dep, Date.now() + 2 * MIN) - R.dep) < 20 * MIN) return null;
-    const rid = S.routeId, r2 = await route(S.from, S.to, S.routeMode, dep, {vias: S.vias || [], anchors: R.anchors || []});
+    const rid = S.routeId, r2 = await route(S.from, S.to, S.routeMode, dep, {inter: interOrder(S.vias || [], S.pins || [], R), anchors: R.anchors || []});
     if(!r2 || rid !== S.routeId) return null;
     if(Math.abs(r2.dist - R.dist) > R.dist * 0.03) return 'replan';
     const ratio = r2.dist / R.dist, cd = r2.cumDist;
@@ -280,7 +296,7 @@ const Traf = (() => {
     if(remain < 800) return 'same';
     /* só as paradas e os pontos de passagem que ainda estão à frente */
     const ahead = (list, dists) => (list || []).filter((p, k) => (dists && dists[k] != null ? dists[k] : Infinity) > dHere + 400);
-    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now(), {vias: ahead(S.vias, S.viaDist), anchors: ahead(R.anchors, (R.anchors || []).map(p => p.d))});
+    const rid = S.routeId, r2 = await route(pos, S.to, S.routeMode, Date.now(), {inter: interOrder(ahead(S.vias, S.viaDist), ahead(S.pins, (S.pins || []).map(p => p.d)), R), anchors: ahead(R.anchors, (R.anchors || []).map(p => p.d))});
     if(!r2 || rid !== S.routeId) return null;
     if(Math.abs(r2.dist - remain) > Math.max(1500, remain * 0.06)) return 'replan';
     const ratio = r2.dist / remain, tHere = tAtDist(R, dHere), tmp = {cumDist: r2.cumDist, cumDur: r2.cumDur};

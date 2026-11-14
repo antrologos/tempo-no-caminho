@@ -244,7 +244,7 @@ function factsText(trip){
     : S.slack ? `, já com ${Math.round(S.slack * 100)}% de folga` : ', sem contar trânsito';
   /* de onde vieram os dados desta consulta */
   const G = S.goog && S.goog.routeId === S.routeId ? S.goog : null;
-  const stops = !S.demo && S.vias && S.vias.length ? ` ${S.vias.length === 1 ? 'Parada' : 'Paradas'}: ${S.vias.map(v => v.label).join(', ')}.` : '';
+  const stops = S.demo ? '' : viaText(S.vias);
   const src = S.demo ? '' : `${stops} Rota: ${r.google ? 'Google' : 'OpenStreetMap'}. Previsão: Open-Meteo` + (G && G.pop ? ' e Google.' : !Goog.getKey() ? '. Google desligado: não há chave guardada neste navegador.' : G && G.skip ? '. Google fora desta consulta.' : G && G.error ? '. Google sem resposta.' : '; aguardando o Google.');
   return `${kmText(r.dist)} em ${durText(r.dur * trip.k)}${slack}. Saída ${dayLabel(trip.dep)} às ${hhmm(trip.dep)}, ${arr}.${src}`;
 }

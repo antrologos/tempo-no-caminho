@@ -631,3 +631,14 @@ body.drafting #layers{display:none}
 .why{margin:8px 0 2px;font-size:13.5px;line-height:1.45;color:var(--muted)}
 .why summary{cursor:pointer;font-weight:700;color:var(--ink)}
 .why p{margin:6px 0 0}
+
+/* ---------- rota escolhida e rotas alternativas, bem diferentes no mapa (versão 4.1) ---------- */
+.mk-alt{padding:3px 9px 2px;border:1.5px dashed var(--muted);border-radius:999px;background:var(--surface);color:var(--ink);font-size:12px;font-weight:700;line-height:1.5;white-space:nowrap;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.35)}
+.mk-alt:hover{border-style:solid;border-color:var(--ink)}
+.alts-key{margin:-6px 0 14px;font-size:12.5px;line-height:1.35;color:var(--muted)}
+.alts-key i{display:inline-block;vertical-align:middle;width:26px;height:0;margin:0 5px 2px 0}
+.alts-key .k-sel{border-top:5px solid var(--ink);border-radius:3px}
+.alts-key .k-alt{border-top:3px dashed var(--muted);margin-left:12px}
+@media (max-width:899px){ .layout[data-sheet="peek"] .alts-key{display:none} }
+.mk-handle{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 6px rgba(0,0,0,.55);pointer-events:none}
+.mk-pass{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #151A20;box-shadow:0 1px 5px rgba(0,0,0,.45);cursor:pointer}
