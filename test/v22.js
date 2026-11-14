@@ -1,29 +1,29 @@
 const { open, planTrip } = require('./harness2');
-const M = { viewport: { width: 390, height: 844 }, dpr: 2, touch: true };
 const errs = o => JSON.stringify(o.log.errors.filter(e => !/Failed to load resource/.test(e)).slice(0, 5));
-const st = p => p.evaluate(() => { const { S } = window.__tempoNoCaminho; const t = S.trip; return { prim: t.prim, head: document.querySelector('#v-head').textContent, sub: document.querySelector('#v-sub').textContent.slice(0, 170),
-  chips: [...document.querySelectorAll('#v-chips .chip, #v-chips > *')].map(c => c.innerText.replace(/\n+/g, ' ')).slice(0, 3), fontes: [...new Set(t.pts.map(q => q.src))].join(','), ex: t.pts.filter((q, i) => i % 9 === 4).map(q => Math.round(q.pop * 100) + '/' + Math.round((q.popApp || 0) * 100)).join(' '),
-  titulos: [...document.querySelectorAll('#ruler-chart text.t')].map(x => x.textContent), leg: [...document.querySelectorAll('#ruler-chart text.s')].map(x => x.textContent).slice(0, 4), leitura: [...document.querySelectorAll('#readout .ro-facts > div')].map(d => d.innerText.replace(/\n+/g, ': ')).filter(x => /Fonte|Modelos|Google/.test(x)),
-  cond: document.querySelector('#readout .ro-cond').innerText.replace(/\n+/g, ' '), lista: [...document.querySelectorAll('#rows .r-wx')].slice(3, 6).map(r => r.innerText.replace(/\n+/g, ' / ')), saida: document.querySelector('#depart-cap').textContent, notaFonte: [...document.querySelectorAll('#v-notes li')].map(l => l.textContent).filter(x => /Google|fontes/.test(x)).map(x => x.slice(0, 110)),
-  slots: S.slots ? S.slots.filter(s => s.rainMin != null).length + ' de 48 com dado; ' + (S.slots.some(s => s.g) ? 'pelo Google' : 'pelos modelos') : null, cartoes: [...document.querySelectorAll('#alts .alt')].map(b => b.innerText.replace(/\n+/g, ' | ')).slice(0, 2) }; });
 (async () => {
-  let o = await open(M); let p = o.page;
+  const o = await open({ viewport: { width: 1366, height: 768 }, dpr: 1 }); const p = o.page;
   await p.addInitScript(() => { try { localStorage.setItem('tnc-gkey', 'AIza-x'); } catch (e) {} }); await p.reload();
+  const st = () => p.evaluate(() => { const { S, Pins } = window.__tempoNoCaminho; const D = S.draft; return { rascunho: !!D, rotas: D ? D.alts.length : (S.alts || []).length, escolhida: D ? D.i : S.alt, km: Math.round((D ? D.alts[D.i].route : S.route).dist / 1000), linhas: [...document.querySelectorAll('#vias .via-row')].map(r => r.querySelector('label').textContent + ': ' + r.querySelector('input').value), pins: Pins.list.map(q => Math.round(q.d / 1000)), bolinhas: document.querySelectorAll('.mk-pass').length, cursor: document.querySelector('#map canvas').style.cursor, alca: !!document.querySelector('.mk-handle') && document.querySelector('.mk-handle').isConnected, erro: document.querySelector('#error').hidden ? '' : document.querySelector('#error').textContent }; });
+  const inter = () => { const b = (o.log.routeBodies || []).slice(-1)[0] || {}; return (b.intermediates || []).map(w => (w.via ? 'passa' : 'para') + '@' + w.location.latLng.longitude.toFixed(2)).join(' ') + (b.computeAlternativeRoutes ? ' [pede alternativas]' : ''); };
   try {
-    await planTrip(p); await p.waitForTimeout(3500);
-    console.log('COM CHAVE (Google principal)', JSON.stringify(await st(p), null, 1));
-    await p.screenshot({ path: 'shots/v46-peek.png' });
-    await p.locator('#sheetbar button[data-sheet=half]').click(); await p.waitForTimeout(800); await p.screenshot({ path: 'shots/v46-grafico.png' });
-    console.log('registro da verificação (colunas, exemplo):', JSON.stringify(await p.evaluate(() => { const r = JSON.parse(localStorage.getItem('tnc-conf-v1')).recs.slice(-1)[0]; return [r.rows[0].length, r.rows[2]]; })));
-    await p.evaluate(() => { document.querySelector('#drawer').hidden = false; }); await p.selectOption('#pref-prim', 'app'); await p.waitForTimeout(1500); await p.evaluate(() => { document.querySelector('#drawer').hidden = true; });
-    const s2 = await st(p); console.log('TROCA PARA OS MODELOS', JSON.stringify({ prim: s2.prim, chips: s2.chips, titulos: s2.titulos, leg: s2.leg, leitura: s2.leitura, ex: s2.ex }));
-  } catch (e) { console.log('FALHA', e.message.slice(0, 300)); await p.screenshot({ path: 'shots/v46-fail.png' }); }
-  console.log('erros:', errs(o)); await o.browser.close();
-  o = await open(M); p = o.page;
-  try { await planTrip(p); await p.waitForTimeout(3000); const s3 = await st(p); console.log('SEM CHAVE', JSON.stringify({ prim: s3.prim, chips: s3.chips, titulos: s3.titulos, fontes: s3.fontes })); } catch (e) { console.log('FALHA', e.message.slice(0, 200)); }
-  console.log('erros:', errs(o)); await o.browser.close();
-  o = await open(Object.assign({ noGoogle: true }, M)); p = o.page;
-  await p.addInitScript(() => { try { localStorage.setItem('tnc-gkey', 'AIza-x'); } catch (e) {} }); await p.reload();
-  try { await planTrip(p); await p.waitForTimeout(3000); const s4 = await st(p); console.log('GOOGLE FORA DO AR', JSON.stringify({ prim: s4.prim, chips: s4.chips, notaFonte: s4.notaFonte })); } catch (e) { console.log('FALHA', e.message.slice(0, 200)); }
+    await planTrip(p, { confirm: false }); await p.waitForSelector('#draft:not([hidden])', { state: 'attached' }); await p.waitForTimeout(1500);
+    await p.locator('#draft-alts .alt').nth(2).click(); await p.waitForTimeout(700);
+    console.log('3ª ROTA ESCOLHIDA', JSON.stringify(await st()), '| pedido:', inter());
+    // um ponto da rota escolhida, a 60% do caminho, na tela
+    const pt = await p.evaluate(() => { const { S, MapCtl } = window.__tempoNoCaminho; const c = S.draft.alts[S.draft.i].route.coords, q = c[Math.floor(c.length * 0.6)]; return MapCtl._px(q[0], q[1]); });
+    await p.mouse.move(pt.x, pt.y - 40); await p.mouse.move(pt.x, pt.y, { steps: 6 }); await p.waitForTimeout(300);
+    let s = await st(); console.log('MOUSE SOBRE A ROTA: cursor =', JSON.stringify(s.cursor), '| ponto branco:', s.alca); await p.screenshot({ path: 'shots/v46-mao.png' });
+    await p.mouse.down(); await p.mouse.move(pt.x + 10, pt.y - 70, { steps: 10 }); await p.waitForTimeout(150);
+    console.log('ARRASTANDO: cursor =', JSON.stringify((await st()).cursor));
+    await p.mouse.up(); await p.waitForTimeout(3500);
+    s = await st(); console.log('DEPOIS DE SOLTAR', JSON.stringify(s), '| pedido:', inter()); await p.screenshot({ path: 'shots/v46-depois.png' });
+    await p.locator('#draft-go').click(); await p.waitForSelector('#layout.has-trip', { state: 'attached', timeout: 25000 }); await p.waitForTimeout(4000);
+    console.log('CONFIRMADO: pontos guardados', JSON.stringify(await p.evaluate(() => { const { S } = window.__tempoNoCaminho; return { vias: S.vias.map(v => (v.pass ? 'passa:' : 'para:') + v.label.slice(0, 22)), pins: (S.pins || []).map(q => Math.round(q.d / 1000)), viaDist: S.viaDist.map(d => Math.round(d / 1000)), hash: decodeURIComponent(location.hash).slice(-60) }; })));
+    await p.evaluate(() => { const t = document.querySelector('#time'); t.value = '17:10'; t.dispatchEvent(new Event('change', { bubbles: true })); }); await p.waitForTimeout(3500);
+    console.log('TROCA DE HORA: pedido ao Google:', inter());
+    // tirar o ponto de passagem clicando na bolinha
+    await p.locator('.mk-pass').first().click(); await p.waitForTimeout(3500);
+    s = await st(); console.log('BOLINHA CLICADA', JSON.stringify({ rascunho: s.rascunho, linhas: s.linhas, pins: s.pins, rotas: s.rotas }), '| pedido:', inter());
+  } catch (e) { console.log('FALHA', e.message.slice(0, 400)); await p.screenshot({ path: 'shots/v46-fail.png' }); }
   console.log('erros:', errs(o)); await o.browser.close();
 })();
